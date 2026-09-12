@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Epicure · The Recipe Room</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#CA8A04">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #FAF7F2;
+    }
+
+    .font-serif-heading {
+      font-family: 'Newsreader', Georgia, serif;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #e7e5e4;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+
+<body
+  class="text-stone-800 min-h-screen flex flex-col justify-between antialiased selection:bg-amber-100 selection:text-amber-900">
+
+  <div class="w-full max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-12 flex-1">
+
+    <!-- Header -->
+    <header class="flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2 mb-8 sm:mb-12">
+      <div class="flex items-center space-x-2.5">
+        <span class="text-2xl sm:text-3xl select-none">🌾</span>
+        <h1 class="font-serif-heading text-2xl sm:text-3xl font-semibold text-stone-900 tracking-tight">The Recipe Room
+        </h1>
+      </div>
+      <div
+        class="text-[11px] sm:text-xs font-mono text-stone-500 flex items-center space-x-1.5 bg-stone-100/80 px-3 py-1 rounded-full border border-stone-200/60">
+        <span class="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></span>
+        <span class="font-medium text-stone-700">Powered by Epicure-Core</span>
+      </div>
+    </header>
+
+    <!-- Hero Title -->
+    <section class="mb-6 sm:mb-8">
+      <h2 class="font-serif-heading text-3xl sm:text-5xl text-stone-900 mb-2.5 sm:mb-3 tracking-tight font-normal">
+        What's in your kitchen?
+      </h2>
+      <p class="text-stone-500 text-xs sm:text-sm sm:text-base max-w-xl leading-relaxed">
+        Combine ingredients and cuisines with +. Epicure-Core pairs the flavours, then builds a measured recipe with cooking steps for your chosen style.
+      </p>
+    </section>
+
+    <section class="bg-white border border-stone-200 rounded-2xl p-5 mb-5">
+      <label for="mainIngredient" class="block font-semibold mb-2">Ingredients + cuisine</label>
+      <input id="mainIngredient" list="mainOptions" value="paneer + spinach + north indian" placeholder="e.g. chicken + garlic + chettinad" maxlength="500" aria-describedby="generationHelp" class="border rounded-lg p-3 w-full mb-2" />
+      <datalist id="mainOptions">
+        <option value="paneer + spinach + north indian"></option>
+        <option value="rice + potato + south indian"></option>
+        <option value="chicken + garlic + chettinad"></option>
+        <option value="tofu + mushroom + chinese + thai"></option>
+      </datalist>
+      <p id="generationHelp" class="text-xs text-stone-500 mb-3">Up to 8 ingredients and 3 cuisines. Each cuisine produces a separate dish for 2. With no cuisine, we use Indian style.</p>
+      <details class="text-xs text-stone-500 mb-3"><summary class="cursor-pointer">Supported ingredients and cuisines</summary><p id="supportedMains" class="mt-2">Loading…</p></details>
+      <button id="generateBtn" class="bg-amber-600 text-white rounded-full px-5 py-2">Generate dishes</button>
+      <button id="searchBtn" class="border border-stone-300 rounded-full px-5 py-2">Search collection</button>
+      <button id="installBtn" hidden class="border rounded-full px-5 py-2">Install app</button>
+      <p id="installHelp" class="text-xs text-stone-500 mt-3">Install from your browser menu, or on iPhone use Share → Add to Home Screen. Generation needs an internet connection.</p>
+    </section>
+    <!-- Quick Regional Cuisine & Ingredient Filter Chips -->
+    <div class="flex flex-wrap gap-1.5 sm:gap-2 mb-6 sm:mb-8" id="pillContainer">
+      <span class="text-[11px] font-semibold uppercase text-stone-400 self-center mr-1">Try:</span>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="south indian">south indian</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="north indian">north indian</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="chettinad">chettinad</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="bengali">bengali</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="kerala">kerala</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="maharashtrian">maharashtrian</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="andhra">andhra</button>
+      <button
+        class="pill bg-white border border-stone-200/90 active:bg-stone-100 px-3 py-1 rounded-full text-[11px] sm:text-xs text-stone-600 hover:bg-stone-50 transition"
+        data-val="mughlai">mughlai</button>
+    </div>
+
+    <!-- Active Count & Identified Tokens -->
+    <div
+      class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 text-[11px] sm:text-xs text-stone-500 mb-3 sm:mb-4 font-medium">
+      <span id="countDisplay" role="status" aria-live="polite">Enter ingredients + cuisine to begin.</span>
+      <span id="canonicalTag" class="text-amber-800 font-semibold"></span>
+    </div>
+
+    <!-- Recipe Discovery Cards Grid -->
+    <div id="recipeGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"></div>
+
+    <!-- Skeleton Loader -->
+    <div id="loadingSkeleton" class="hidden grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      <div class="bg-white border border-stone-200 rounded-2xl p-5 animate-pulse space-y-3">
+        <div class="flex justify-between items-center">
+          <div class="w-8 h-8 bg-stone-100 rounded-full"></div>
+          <div class="w-20 h-5 bg-stone-100 rounded-full"></div>
+        </div>
+        <div class="w-3/4 h-5 bg-stone-100 rounded"></div>
+        <div class="w-1/2 h-3 bg-stone-100 rounded pt-2"></div>
+      </div>
+      <div class="bg-white border border-stone-200 rounded-2xl p-5 animate-pulse space-y-3">
+        <div class="flex justify-between items-center">
+          <div class="w-8 h-8 bg-stone-100 rounded-full"></div>
+          <div class="w-20 h-5 bg-stone-100 rounded-full"></div>
+        </div>
+        <div class="w-2/3 h-5 bg-stone-100 rounded"></div>
+        <div class="w-1/3 h-3 bg-stone-100 rounded pt-2"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Instructions Modal / Drawer -->
+  <div id="recipeModal"
+    class="fixed inset-0 bg-stone-900/40 backdrop-blur-xs hidden z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200">
+    <div
+      class="bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[90vh] sm:max-h-[85vh] overflow-hidden flex flex-col p-5 sm:p-7 shadow-2xl border border-stone-100">
+      <!-- Modal Header -->
+      <div class="flex justify-between items-start mb-4 pb-3 border-b border-stone-100">
+        <div class="pr-2">
+          <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+            <span id="modalGeneratedBadge"
+              class="hidden text-[10px] font-bold tracking-wider uppercase bg-purple-100 text-purple-900 border border-purple-300 px-2.5 py-0.5 rounded-full items-center gap-1">
+              ⚡ Epicure Generated Dish
+            </span>
+            <span id="modalMatchScore"
+              class="text-[10px] font-bold tracking-wider uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+              99.6% FLAVOUR MATCH
+            </span>
+            <span id="modalCuisine"
+              class="text-[10px] font-bold tracking-widest uppercase bg-[#FEF3C7] text-amber-900 px-2 py-0.5 rounded">
+              INDIAN
+            </span>
+          </div>
+          <h3 id="modalTitle" class="font-serif-heading text-xl sm:text-2xl font-semibold text-stone-900 leading-snug">
+            Dish Name
+          </h3>
+        </div>
+        <button id="closeModal"
+          class="text-stone-400 hover:text-stone-700 p-1.5 rounded-full hover:bg-stone-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="overflow-y-auto custom-scrollbar pr-1 space-y-5 text-xs sm:text-sm">
+        <div>
+          <h4 class="text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-2 flex items-center gap-1.5">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-600"></i> Ingredients & Epicure flavour pairings
+          </h4>
+          <div id="modalFlavourNotes" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <div>
+          <h4 class="text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-2">Ingredients Needed</h4>
+          <ul id="modalIngredients" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-stone-700 font-normal"></ul>
+        </div>
+
+        <!-- Step-by-Step Interactive Instruction Card -->
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <h4 class="text-[11px] font-bold uppercase tracking-wider text-stone-400 flex items-center gap-1.5">
+              <i data-lucide="chef-hat" class="w-3.5 h-3.5 text-amber-600"></i> Step-by-Step Instructions
+            </h4>
+            <span id="stepCounter" class="text-[11px] font-mono font-medium text-stone-400">Step 1 of 1</span>
+          </div>
+
+          <div
+            class="bg-stone-50 border border-stone-200/80 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs min-h-[140px]">
+            <div class="flex items-start gap-3 mb-4">
+              <span id="stepBadge"
+                class="bg-amber-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                1
+              </span>
+              <p id="stepText" class="text-stone-700 text-xs sm:text-sm leading-relaxed font-normal">
+                Instruction content will appear here...
+              </p>
+            </div>
+
+            <!-- Carousel Navigation Controls -->
+            <div class="flex justify-between items-center pt-3 border-t border-stone-200/60">
+              <button id="prevStepBtn"
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs font-medium">
+                <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                <span>Previous</span>
+              </button>
+
+              <!-- Step Indicator Dots -->
+              <div id="stepDots" class="hidden sm:flex items-center space-x-1.5"></div>
+
+              <button id="nextStepBtn"
+                class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs font-medium shadow-xs">
+                <span>Next</span>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.lucide?.createIcons();
+
+    const API_BASE = '';
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    const EMOJI_VOCAB = [
+      {keys: ['rice', 'biryani', 'pulao', 'pilaf', 'bhat'], icon: '🍚'},
+      {keys: ['noodle', 'pasta', 'maggi'], icon: '🍝'},
+      {keys: ['bread', 'naan', 'roti', 'paratha', 'phulka', 'puri', 'dosa', 'idli', 'appam'], icon: '🫓'},
+      {keys: ['potato', 'potatoes', 'aloo', 'karela'], icon: '🥔'},
+      {keys: ['chicken', 'poultry', 'murgh'], icon: '🍗'},
+      {keys: ['mutton', 'lamb', 'gosht', 'keema'], icon: '🥩'},
+      {keys: ['fish', 'meen', 'prawn', 'shrimp'], icon: '🐟'},
+      {keys: ['paneer', 'tofu'], icon: '🧈'},
+      {keys: ['cilantro', 'coriander', 'mint', 'pudina', 'curry leaves'], icon: '🌿'},
+      {keys: ['tomato', 'tamatar'], icon: '🍅'},
+      {keys: ['chili', 'pepper', 'spicy', 'mirch'], icon: '🌶️'},
+      {keys: ['garlic', 'onion', 'pyaz', 'lasun'], icon: '🧄'},
+      {keys: ['dal', 'lentil', 'chickpea', 'rajma', 'chana', 'sambar', 'rasam'], icon: '🫘'},
+      {keys: ['curry', 'masala', 'korma', 'gravy', 'poriyal', 'vepudu', 'jhol', 'sukka', 'shaak'], icon: '🍛'}
+    ];
+
+    const DYNAMIC_FALLBACK_PALETTE = ['🍲', '🥘', '🍳', '🥣', '🥗', '🍛', '🍱', '🥡', '🥙', '🍽️'];
+
+    function safeArray(val) {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string' && val.trim().length > 0) return [val];
+      return [];
+    }
+
+    function formatCookingTime(totalMinutes) {
+      const mins = parseInt(totalMinutes, 10);
+      if (isNaN(mins) || mins <= 0) return '30 min';
+      if (mins < 60) return `${mins} min`;
+      const hours = Math.floor(mins / 60);
+      const remainingMins = mins % 60;
+      return remainingMins > 0 ? `${hours} hr ${remainingMins} min` : `${hours} hr`;
+    }
+
+    function getDynamicEmoji(title, ingredients) {
+      const ings = safeArray(ingredients);
+      const corpus = `${title || ''} ${ings.join(' ')}`.toLowerCase();
+
+      for (const entity of EMOJI_VOCAB) {
+        for (const word of entity.keys) {
+          if (new RegExp(`\\b${word}\\b`, 'i').test(corpus)) {
+            return entity.icon;
+          }
+        }
+      }
+
+      let hash = 0;
+      for (let i = 0; i < corpus.length; i++) {
+        hash = (hash << 5) - hash + corpus.charCodeAt(i);
+        hash |= 0;
+      }
+      return DYNAMIC_FALLBACK_PALETTE[Math.abs(hash) % DYNAMIC_FALLBACK_PALETTE.length];
+    }
+
+    let recipeStore = [];
+    let currentDirections = [];
+    let currentStepIndex = 0;
+
+    const searchInput = document.getElementById('mainIngredient');
+    const searchBtn = document.getElementById('searchBtn');
+    const countDisplay = document.getElementById('countDisplay');
+    const canonicalTag = document.getElementById('canonicalTag');
+    const recipeGrid = document.getElementById('recipeGrid');
+    const loadingSkeleton = document.getElementById('loadingSkeleton');
+    const recipeModal = document.getElementById('recipeModal');
+    const closeModal = document.getElementById('closeModal');
+    const modalGeneratedBadge = document.getElementById('modalGeneratedBadge');
+
+    const stepText = document.getElementById('stepText');
+    const stepBadge = document.getElementById('stepBadge');
+    const stepCounter = document.getElementById('stepCounter');
+    const prevStepBtn = document.getElementById('prevStepBtn');
+    const nextStepBtn = document.getElementById('nextStepBtn');
+    const stepDots = document.getElementById('stepDots');
+
+    function renderInstructionStep(index) {
+      if (!currentDirections || currentDirections.length === 0) {
+        stepText.textContent = "No specific instructions available.";
+        stepBadge.textContent = "1";
+        stepCounter.textContent = "Step 1 of 1";
+        prevStepBtn.disabled = true;
+        nextStepBtn.disabled = true;
+        stepDots.innerHTML = "";
+        return;
+      }
+
+      currentStepIndex = Math.max(0, Math.min(index, currentDirections.length - 1));
+
+      stepText.textContent = currentDirections[currentStepIndex];
+      stepBadge.textContent = (currentStepIndex + 1).toString();
+      stepCounter.textContent = `Step ${currentStepIndex + 1} of ${currentDirections.length}`;
+
+      prevStepBtn.disabled = currentStepIndex === 0;
+      nextStepBtn.disabled = currentStepIndex === currentDirections.length - 1;
+
+      // Render indicator dots
+      stepDots.innerHTML = currentDirections.map((_, i) => `
+        <span class="w-1.5 h-1.5 rounded-full transition-all ${i === currentStepIndex ? 'bg-amber-600 w-3' : 'bg-stone-300'}"></span>
+      `).join('');
+    }
+
+    prevStepBtn.addEventListener('click', () => {
+      if (currentStepIndex > 0) {
+        renderInstructionStep(currentStepIndex - 1);
+      }
+    });
+
+    nextStepBtn.addEventListener('click', () => {
+      if (currentStepIndex < currentDirections.length - 1) {
+        renderInstructionStep(currentStepIndex + 1);
+      }
+    });
+
+    async function performSearch(generate = true) {
+      if (searchBtn.disabled) return;
+      const q = searchInput.value.trim();
+      if (!q) { countDisplay.textContent = 'Enter ingredients + cuisine first.'; return; }
+
+      recipeGrid.innerHTML = '';
+      canonicalTag.textContent = '';
+      searchBtn.disabled = true;
+      document.getElementById('generateBtn').disabled = true;
+      loadingSkeleton.classList.remove('hidden');
+      loadingSkeleton.classList.add('grid');
+      countDisplay.textContent = 'Preparing your recipes…';
+
+      try {
+        const response = await fetch(generate ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(q)}&include_generated=false`, generate ? {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({q}), signal: AbortSignal.timeout(60000)
+        } : {signal: AbortSignal.timeout(60000)});
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(typeof data.detail === 'string' ? data.detail : data.error || 'Unable to complete this request. Please try again.');
+        recipeStore = data.recipes || [];
+
+        if (data.matched_canonical_ingredients && data.matched_canonical_ingredients.length > 0) {
+          canonicalTag.textContent = `Using: ${data.matched_canonical_ingredients.join(', ')}`;
+        } else {
+          canonicalTag.textContent = '';
+        }
+
+        const detectedStyle = data.detected_cuisine ? ` [${data.detected_cuisine} Mode]` : '';
+        countDisplay.textContent = `${recipeStore.length} ${recipeStore.length === 1 ? 'dish' : 'dishes'} ${generate ? 'generated with Epicure-Core' : 'found'}${detectedStyle}`;
+
+        if (recipeStore.length === 0) {
+          recipeGrid.innerHTML = `
+            <div class="col-span-full text-center py-10 text-stone-400 text-xs sm:text-sm">
+              No dishes found for this combination. Try broadening your terms.
+            </div>
+          `;
+          return;
+        }
+
+        recipeGrid.innerHTML = recipeStore.map((dish, idx) => {
+          const ingredientsList = safeArray(dish.ingredients);
+          const directionsList = safeArray(dish.directions);
+          const flavourNotes = safeArray(dish.flavour_notes);
+
+          const emoji = dish.is_generated ? '✨' : getDynamicEmoji(dish.title, ingredientsList);
+          const rawMinutes = dish.prep_time || (15 + Math.min(directionsList.length * 4, 45));
+          const timeDisplay = formatCookingTime(rawMinutes);
+          const matchScore = dish.flavour_match_score ?? 0;
+          const cuisineLabel = (dish.cuisine || 'Indian').toUpperCase();
+
+          const cardClasses = dish.is_generated
+            ? "bg-gradient-to-br from-purple-50/80 via-white to-amber-50/60 border-2 border-purple-300 shadow-md ring-1 ring-purple-200"
+            : "bg-white border border-stone-200/80 hover:border-amber-300 shadow-xs";
+
+          return `
+            <div 
+              onclick="openRecipe(${idx})"
+              role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openRecipe(${idx}); }"
+              class="${cardClasses} rounded-2xl p-4 sm:p-5 transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+            >
+              <div>
+                <div class="flex flex-wrap gap-2 justify-between items-start mb-2.5 sm:mb-3">
+                  <span class="text-2xl sm:text-3xl select-none">${emoji}</span>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    ${dish.is_generated ? `
+                      <span class="text-[10px] font-bold tracking-wider uppercase bg-purple-600 text-white px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                        ⚡ EPICURE GENERATED
+                      </span>
+                    ` : `
+                      <span class="text-[10px] sm:text-[11px] font-bold tracking-tight bg-emerald-50 text-emerald-800 border border-emerald-200/70 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <i data-lucide="sparkles" class="w-3 h-3 text-emerald-600"></i> ${matchScore}% Match
+                      </span>
+                    `}
+                    <span class="text-[9px] font-bold tracking-wider uppercase bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded">
+                      ${escapeHtml(cuisineLabel)}
+                    </span>
+                  </div>
+                </div>
+                <h3 class="font-serif-heading text-base sm:text-lg font-semibold ${dish.is_generated ? 'text-purple-950 font-bold' : 'text-stone-900'} group-hover:text-amber-950 transition leading-snug mb-2">
+                  ${escapeHtml(dish.title)}
+                </h3>
+                <div class="flex flex-wrap gap-1 mb-3">
+                  ${flavourNotes.map(tag => `
+                    <span class="${dish.is_generated ? 'bg-purple-100/70 text-purple-900' : 'bg-stone-100 text-stone-600'} text-[10px] font-medium px-2 py-0.5 rounded-md">
+                      ${escapeHtml(tag)}
+                    </span>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-[11px] sm:text-xs text-stone-400 font-medium pt-2.5 border-t ${dish.is_generated ? 'border-purple-100' : 'border-stone-100'}">
+                <span class="flex items-center"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> ${timeDisplay}</span>
+                <span class="flex items-center ${dish.is_generated ? 'text-purple-800 font-bold' : 'text-amber-800 font-semibold'} group-hover:translate-x-0.5 transition-transform">
+                  View Dish <i data-lucide="chevron-right" class="w-3.5 h-3.5 ml-0.5"></i>
+                </span>
+              </div>
+            </div>
+          `;
+        }).join('');
+        window.lucide?.createIcons();
+      } catch (err) {
+        console.error('Fetch error:', err);
+        countDisplay.textContent = navigator.onLine ? err.message : 'You are offline. Reconnect to generate or search recipes.';
+      } finally {
+        searchBtn.disabled = false;
+        document.getElementById('generateBtn').disabled = false;
+        loadingSkeleton.classList.add('hidden');
+        loadingSkeleton.classList.remove('grid');
+      }
+    }
+
+    function openRecipe(idx) {
+      const dish = recipeStore[idx];
+      if (!dish) return;
+
+      const ingredientsList = safeArray(dish.ingredients);
+      currentDirections = safeArray(dish.directions);
+      const flavourNotes = safeArray(dish.flavour_notes);
+
+      document.getElementById('modalTitle').textContent = dish.title || 'Untitled Recipe';
+      document.getElementById('modalMatchScore').textContent = dish.is_generated ? `${dish.servings} servings · ${dish.prep_time} min total` : `${dish.flavour_match_score ?? 0}% FLAVOUR MATCH`;
+      document.getElementById('modalCuisine').textContent = (dish.cuisine || "INDIAN").toUpperCase();
+
+      if (dish.is_generated) {
+        modalGeneratedBadge.classList.remove('hidden');
+        modalGeneratedBadge.classList.add('flex');
+      } else {
+        modalGeneratedBadge.classList.add('hidden');
+        modalGeneratedBadge.classList.remove('flex');
+      }
+
+      document.getElementById('modalFlavourNotes').innerHTML = flavourNotes.map(tag => `
+        <span class="${dish.is_generated ? 'bg-purple-100 text-purple-900 border-purple-200' : 'bg-amber-50 text-amber-900 border-amber-200/60'} border text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+          ${escapeHtml(tag)}
+        </span>
+      `).join('');
+
+      document.getElementById('modalIngredients').innerHTML = ingredientsList.map(ing => `
+        <li class="bg-stone-50 border border-stone-100/80 px-2.5 py-1.5 rounded-lg text-stone-700 flex items-start">
+          <span class="text-amber-700 mr-1.5">·</span>
+          <span>${escapeHtml(ing)}</span>
+        </li>
+      `).join('');
+
+      // Initialize instruction carousel at step 1
+      renderInstructionStep(0);
+
+      recipeModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      window.lucide?.createIcons();
+    }
+
+    function closeRecipeModal() {
+      recipeModal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    closeModal.addEventListener('click', closeRecipeModal);
+    recipeModal.addEventListener('click', (e) => {
+      if (e.target === recipeModal) closeRecipeModal();
+    });
+
+    searchBtn.addEventListener('click', () => performSearch(false));
+    document.getElementById('generateBtn').addEventListener('click', () => performSearch(true));
+    
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRecipeModal(); });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') performSearch();
+    });
+
+    document.querySelectorAll('.pill').forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        const val = e.currentTarget.dataset.val;
+        const current = searchInput.value.trim();
+        const parts = current.split('+').map(part => part.trim()).filter(Boolean);
+        if (!parts.some(part => part.toLowerCase() === val.toLowerCase())) parts.push(val);
+        searchInput.value = parts.join(' + ');
+        performSearch();
+      });
+    });
+
+    fetch('/api/ingredients').then(r => r.json()).then(data => {
+      document.getElementById('supportedMains').textContent = 'Mains: ' + data.ingredients.join(', ') + '. Additions: ' + data.additional_ingredients.join(', ') + '. Cuisines: ' + data.cuisines.join(', ') + '.';
+    }).catch(() => { document.getElementById('supportedMains').textContent = 'Ingredient list unavailable. Reconnect and reload.'; });
+    let installPrompt;
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault(); installPrompt = event;
+      document.getElementById('installBtn').hidden = false;
+    });
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!installPrompt) return;
+      await installPrompt.prompt();
+      installPrompt = null; document.getElementById('installBtn').hidden = true;
+    });
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(console.error);
+    performSearch();
+  </script>
+</body>
+
+</html>

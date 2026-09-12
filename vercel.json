@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "app.py": {
+      "includeFiles": "{backend/*.py,backend/*.json,backend/*.index,frontend/**}",
+      "maxDuration": 60
+    }
+  }
+}
