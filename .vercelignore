@@ -2,3 +2,10 @@
 backend/venv/
 **/__pycache__/
 *.pyc
+backend/
+app.py
+requirements.txt
+.python-version
+epicure_engine.py
+recipe_faiss.index
+recipes_metadata.json

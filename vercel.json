@@ -1,8 +1,13 @@
 {
-  "functions": {
-    "app.py": {
-      "includeFiles": "{backend/*.py,backend/*.json,backend/*.index,frontend/**}",
-      "maxDuration": 60
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "",
+  "outputDirectory": "frontend",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://reciperoom-backend.onrender.com/api/:path*"
     }
-  }
+  ]
 }
