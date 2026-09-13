@@ -1,4 +1,5 @@
 import { LIKED_KEY, RECENT_KEY, readRecipes, signature, toggleLiked } from './store.js';
+import { recommendations } from './recommendations.js';
 
 const API_BASE = window.RECIPE_API_BASE || '';
 const $ = id => document.getElementById(id);
@@ -12,8 +13,11 @@ let loading = false;
 let guideLoaded = false;
 let toastTimer;
 let originPage = '#/';
+const stepPositions = new Map();
+let activeRecipe;
+const cookingSteps = recipe => recipe.directions.flatMap(text => text.replace(/([.!?])\s*(?=[A-Z])/g, '$1\n').split('\n')).map(text=>text.trim()).filter(Boolean);
 const isLiked = recipe => likes.some(item => signature(item) === signature(recipe));
-const findRecipe = key => likes.find(r => r.key === key) || recent.find(r => r.key === key);
+const findRecipe = key => likes.find(r => r.key === key) || recent.find(r => r.key === key) || recommendations.find(r => r.key === key);
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
 
 function announce(message) {
@@ -32,9 +36,10 @@ function duration(recipe) {
 }
 function card(recipe) {
   const meta = [duration(recipe), recipe.servings ? `${recipe.servings} servings` : ''].filter(Boolean).join(' · ');
-  return `<article class="recipe-card"><a class="card-link" href="#/recipe/${encodeURIComponent(recipe.key)}"><p class="card-label">${escapeHtml(recipe.cuisine || 'Recipe')}</p><h3>${escapeHtml(recipe.title)}</h3><p class="card-meta">${escapeHtml(meta)} <span aria-hidden="true">↗</span></p></a>${likeButton(recipe)}</article>`;
+  return `<article class="recipe-card${recipe.source==='generated'?' generated-card':''}"><a class="card-link" href="#/recipe/${encodeURIComponent(recipe.key)}"><p class="card-label">${recipe.source==='generated'?'Generated · ':''}${escapeHtml(recipe.cuisine || 'Recipe')}</p><h3>${escapeHtml(recipe.title)}</h3><p class="card-meta">${escapeHtml(meta)} <span aria-hidden="true">↗</span></p></a>${likeButton(recipe)}</article>`;
 }
 function renderCollections() {
+  $('recommendationsGrid').innerHTML = recommendations.map(card).join('');
   $('resultsGrid').innerHTML = results.map(card).join('');
   $('resultsHeading').hidden = !results.length;
   $('resultsCount').textContent = `${results.length} ${results.length === 1 ? 'dish' : 'dishes'}`;
@@ -44,13 +49,30 @@ function renderCollections() {
   $('likedCount').hidden = !likes.length;
 }
 function showRecipe(recipe) {
+  activeRecipe = recipe;
   if (!recipe) {
     $('recipePage').innerHTML = '<div class="empty-state"><h1>Recipe not found.</h1><p>This dish is no longer available on this device.</p><a class="primary-button" href="#/">Explore recipes</a></div>';
     return;
   }
   $('recipePage').innerHTML = `<div class="page-heading"><a class="back-link" href="${originPage}">${icon('arrow')}${originPage === '#/liked' ? 'Liked dishes' : 'All dishes'}</a><p class="card-label">${escapeHtml(recipe.cuisine || 'Recipe')}</p><h1 class="detail-title">${escapeHtml(recipe.title)}</h1></div>
     <div class="detail-toolbar"><div class="detail-meta">${[duration(recipe),recipe.servings ? `${recipe.servings} servings` : '',recipe.diet].filter(Boolean).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div>${likeButton(recipe,true)}</div>
-    <div class="recipe-content"><section><h2>Ingredients</h2><ul class="ingredients">${recipe.ingredients.map(text=>`<li>${escapeHtml(text)}</li>`).join('')}</ul></section><section><h2>Let’s cook</h2><ol class="directions">${recipe.directions.map(text=>`<li><p>${escapeHtml(text)}</p></li>`).join('')}</ol></section></div>`;
+    <div class="recipe-content"><section><h2>Ingredients</h2><ul class="ingredients">${recipe.ingredients.map(text=>`<li>${escapeHtml(text)}</li>`).join('')}</ul></section><section class="cooking-section"><h2>Let’s cook</h2><div class="step-card"><div id="stepContent" aria-live="polite" aria-atomic="true"></div><div class="step-controls"><button type="button" class="like-button" id="previousStep">Previous</button><button type="button" class="primary-button" id="nextStep">Next step</button></div></div></section></div>`;
+  $('previousStep').addEventListener('click',()=>moveStep(-1));
+  $('nextStep').addEventListener('click',()=>moveStep(1));
+  renderStep();
+}
+function renderStep() {
+  const steps = cookingSteps(activeRecipe);
+  const count = steps.length;
+  const position = Math.min(stepPositions.get(activeRecipe.key) || 0, Math.max(0,count-1));
+  $('stepContent').innerHTML = count ? `<p class="step-count">Step ${position+1} of ${count}</p><progress aria-label="Cooking progress" value="${position+1}" max="${count}"></progress><p class="step-instruction">${escapeHtml(steps[position])}</p>${position===count-1?'<p class="step-end">Final step · enjoy your dish.</p>':''}` : '<p>No instructions available for this dish.</p>';
+  $('previousStep').disabled = position===0;
+  $('nextStep').disabled = !count || position===count-1;
+}
+function moveStep(delta) {
+  const position = stepPositions.get(activeRecipe.key) || 0;
+  stepPositions.set(activeRecipe.key,Math.max(0,Math.min(cookingSteps(activeRecipe).length-1,position+delta)));
+  renderStep();
 }
 function route() {
   const hash = location.hash || '#/';
@@ -90,7 +112,7 @@ async function requestRecipes(generated) {
     });
     const data = await response.json().catch(()=>({}));
     if (!response.ok || data.error) throw new Error(response.status===404 ? 'Recipe generation is unavailable. The backend needs to be updated.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
-    results = (Array.isArray(data.recipes) ? data.recipes : []).map(normalizeRecipe);
+    results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
     recent = [...results,...recent.filter(r=>!keys.has(r.key))].slice(0,100);
     try { sessionStorage.setItem(RECENT_KEY, JSON.stringify(recent)); sessionStorage.setItem('recipe-room:results:v1', JSON.stringify(results)); } catch { /* Still usable in this session; liked recipes persist separately. */ }
@@ -134,7 +156,7 @@ document.addEventListener('click',event=>{
     likes = saved.recipes;
     renderCollections();
     if (currentPage==='recipe') showRecipe(recipe);
-    const replacement = document.querySelector(`#${currentPage==='recipe'?'recipePage':currentPage==='liked'?'likedGrid':'resultsGrid'} [data-like="${CSS.escape(recipe.key)}"]`);
+    const replacement = document.querySelector(`#${currentPage==='recipe'?'recipePage':currentPage==='liked'?'likedGrid':'homePage'} [data-like="${CSS.escape(recipe.key)}"]`);
     if (replacement) replacement.focus({preventScroll:true});
     else $('main').focus({preventScroll:true});
     announce(saved.liked ? 'Saved to Liked.' : 'Removed from Liked.');
@@ -163,3 +185,4 @@ updateInstall();
 renderCollections();
 route();
 if(!window.RECIPE_NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
