@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Epicure — The Recipe Room",
   "short_name": "Epicure",
-  "description": "Turn a main ingredient into a dish with Epicure.",
+  "description": "Turn ingredients and cuisines into dishes with Epicure-Core.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

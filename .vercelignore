@@ -9,3 +9,4 @@ requirements.txt
 epicure_engine.py
 recipe_faiss.index
 recipes_metadata.json
+mobile/
