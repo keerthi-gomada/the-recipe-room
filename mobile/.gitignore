@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+www/
+android/.gradle/
+android/local.properties
+android/**/build/
+ios/**/xcuserdata/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">The Recipe Room</string>
+    <string name="title_activity_main">The Recipe Room</string>
+    <string name="package_name">com.keerthigomada.thereciperoom</string>
+    <string name="custom_url_scheme">com.keerthigomada.thereciperoom</string>
+</resources>
