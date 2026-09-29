@@ -8,6 +8,14 @@ import numpy as np
 
 MODEL_ID = 'Kaikaku/epicure-core'
 
+# User-supplied portion guide: grams per person, independently for each selected main.
+GRAMS_PER_PERSON = {
+    'potato': 150, 'cauliflower': 150, 'carrot': 100, 'broccoli': 150,
+    'mushroom': 150, 'spinach': 100, 'paneer': 120, 'tofu': 120,
+    'chickpea': 150, 'bell_pepper': 100, 'zucchini': 150, 'eggplant': 150,
+    'pea': 100, 'chicken': 150, 'rice': 75,
+}
+
 @dataclass(frozen=True)
 class Method:
     preparation: str
@@ -36,29 +44,30 @@ METHODS = {
     'rice': Method('dry basmati rice, rinsed and drained', 'Put the rice and its 300 ml water in a saucepan. Bring to a boil, cover tightly and reduce heat to low. Cook for 12 minutes, then turn off the heat and leave covered for 10 minutes. Fluff with a fork; the grains should be tender with no standing water.', 26, 300),
 }
 
+# Two-person amounts from the user's portion guide; the UI scales from this base.
 # name: (quantity/preparation, stage). Explicit user seasonings are never dropped.
 EXTRAS = {
-    'onion': ('1 small onion (80 g), finely chopped', 'onion'),
-    'garlic': ('2 garlic cloves, minced', 'aromatic'),
+    'onion': ('1 medium onion, finely chopped', 'onion'),
+    'garlic': ('2–4 cloves garlic, minced', 'aromatic'),
     'ginger': ('2 teaspoons grated ginger', 'aromatic'),
-    'tomato': ('150 g tomato, finely chopped', 'tomato'),
-    'coconut_milk': ('100 ml coconut milk', 'liquid'),
-    'coconut': ('2 tablespoons grated coconut', 'finish'),
-    'soy_sauce': ('2 teaspoons soy sauce', 'liquid'),
-    'lemon': ('2 teaspoons lemon juice', 'finish'),
-    'lime': ('2 teaspoons lime juice', 'finish'),
-    'curry_leaf': ('8 curry leaves, rinsed and dried thoroughly', 'temper'),
-    'mustard_seed': ('1/2 teaspoon mustard seeds', 'temper'),
-    'cumin': ('1/4 teaspoon ground cumin', 'spice'),
-    'coriander': ('1/4 teaspoon ground coriander', 'spice'),
-    'turmeric': ('1/4 teaspoon ground turmeric', 'spice'),
-    'black_pepper': ('1/4 teaspoon ground black pepper', 'spice'),
-    'fennel_seed': ('1/4 teaspoon ground fennel seeds', 'spice'),
-    'cinnamon': ('1 small pinch ground cinnamon', 'spice'),
-    'garam_masala': ('1/4 teaspoon garam masala', 'spice'),
-    'paprika': ('1/4 teaspoon paprika', 'spice'),
-    'oregano': ('1/2 teaspoon dried oregano', 'spice'),
-    'basil': ('1 tablespoon chopped fresh basil', 'finish'),
+    'tomato': ('2 medium tomatoes, finely chopped', 'tomato'),
+    'coconut_milk': ('200 ml coconut milk', 'liquid'),
+    'coconut': ('50 g grated coconut', 'finish'),
+    'soy_sauce': ('2 tablespoons soy sauce', 'liquid'),
+    'lemon': ('1 lemon, juiced; discard seeds', 'finish'),
+    'lime': ('1 lime, juiced; discard seeds', 'finish'),
+    'curry_leaf': ('12–16 curry leaves, rinsed and dried thoroughly', 'temper'),
+    'mustard_seed': ('1 teaspoon mustard seeds', 'temper'),
+    'cumin': ('1 teaspoon cumin seeds', 'temper'),
+    'coriander': ('2 teaspoons coriander powder', 'spice'),
+    'turmeric': ('1/2 teaspoon ground turmeric', 'spice'),
+    'black_pepper': ('1/2 teaspoon ground black pepper', 'spice'),
+    'fennel_seed': ('1 teaspoon fennel seeds', 'temper'),
+    'cinnamon': ('4–6 cm cinnamon stick', 'temper'),
+    'garam_masala': ('1 teaspoon garam masala', 'spice'),
+    'paprika': ('1 teaspoon paprika', 'spice'),
+    'oregano': ('1 teaspoon dried oregano', 'spice'),
+    'basil': ('1 teaspoon dried basil', 'finish'),
 }
 
 @dataclass(frozen=True)
@@ -108,12 +117,44 @@ def normalize(text):
     return ' '.join(text.lower().strip().replace('_', ' ').split())
 
 
-def parse_query(query, cuisine=None):
+class DuplicateIngredientError(ValueError):
+    pass
+
+
+def tokenize_query(query, cuisine=None):
+    vocabulary = {normalize(key) for key in [*METHODS, *EXTRAS, *STYLES, *ALIASES, *CUISINE_ALIASES]}
+    phrases = sorted(vocabulary, key=lambda name: len(name.split()), reverse=True)
     parts = query.split('+')
     if cuisine is not None:
         parts += cuisine.split('+')
     if any(not p.strip() for p in parts):
-        raise ValueError('Enter ingredients and cuisines separated by +, without empty parts.')
+        raise ValueError('Enter ingredients and cuisines separated by spaces or +, without empty parts.')
+    tokens = []
+    for part in parts:
+        words = normalize(part).replace('cuisine:', '').split()
+        while words:
+            match = next((phrase for phrase in phrases if words[:len(phrase.split())] == phrase.split()), None)
+            if match:
+                tokens.append(match)
+                words = words[len(match.split()):]
+            else:
+                tokens.append(words.pop(0))
+    return tokens
+
+
+def validate_duplicates(parts):
+    seen = set()
+    for part in parts:
+        key = ALIASES.get(part, part.replace(' ', '_'))
+        if key in METHODS or key in EXTRAS:
+            if key in seen:
+                raise DuplicateIngredientError(key.replace('_', ' ').capitalize() + ' already exists. Add each ingredient only once.')
+            seen.add(key)
+
+
+def parse_query(query, cuisine=None):
+    parts = tokenize_query(query, cuisine)
+    validate_duplicates(parts)
     ingredients, cuisines, unknown = [], [], []
     for part in parts:
         clean = normalize(part).removeprefix('cuisine:')
@@ -167,13 +208,12 @@ def compose_dish(engine, requested, cuisine, index=0):
     additions = dict.fromkeys(['onion', *style.essentials,
                               *(key for key in requested if key in EXTRAS), *selected])
     non_rice = [key for key in mains if key != 'rice']
-    portion = round((300 if 'rice' in mains else 400) / max(1, len(non_rice)) / 10) * 10
     ingredient_lines = []
-    directions = ['Measure and prepare all ingredients as listed. This recipe serves 2. Keep each cooked component covered while preparing the next; combine and serve promptly.']
+    directions = ['Measure and prepare all ingredients as listed. This recipe serves 2. Use a pan large enough for the measured amounts, or cook in batches without crowding. Keep each cooked component covered while preparing the next; combine and serve promptly.']
     total_minutes = 10
     for key in mains:
         method = METHODS[key]
-        grams = 150 if key == 'rice' else portion
+        grams = GRAMS_PER_PERSON[key] * 2
         name = key.replace('_', ' ')
         ingredient_lines.append(f'{grams} g {name} ({method.preparation})')
         if method.water:
@@ -186,12 +226,14 @@ def compose_dish(engine, requested, cuisine, index=0):
             intro = f'Bring the {method.water} ml water for the {name} to a boil in a small saucepan. '
         else:
             intro = f'Heat the 1 teaspoon oil for the {name} in a nonstick skillet for 30 seconds. '
-        directions.append(intro + method.cooking + ' Set aside, covered.')
+        directions.append(intro + method.cooking.replace('its teaspoon of oil', 'its measured oil') + ' Set aside, covered.')
         total_minutes += method.minutes
     ingredient_lines += [EXTRAS[key][0] for key in additions]
     ingredient_lines += [f'1 tablespoon {style.oil} for the flavour base',
                          '1/8 teaspoon salt, plus more to taste' if 'soy_sauce' in additions else '1/4 teaspoon salt, plus more to taste']
-    stages = {stage: [key.replace('_', ' ') for key in additions if EXTRAS[key][1] == stage]
+    names = {'cumin': 'cumin seeds', 'fennel_seed': 'fennel seeds',
+             'cinnamon': 'cinnamon stick', 'lemon': 'lemon juice', 'lime': 'lime juice'}
+    stages = {stage: [names.get(key, key.replace('_', ' ')) for key in additions if EXTRAS[key][1] == stage]
               for stage in ['temper', 'aromatic', 'spice', 'tomato', 'liquid', 'finish']}
     directions.append(f'For the {style.label}-inspired base, heat 1 tablespoon {style.oil} in a large deep skillet over medium heat for 1 minute.')
     if stages['temper']:
@@ -199,8 +241,7 @@ def compose_dish(engine, requested, cuisine, index=0):
     directions.append('Add the chopped onion. Cook over medium heat for 5–7 minutes, stirring often, until softened and lightly golden.')
     if stages['aromatic']:
         directions.append('Reduce to medium-low heat. Add the ' + ' and '.join(stages['aromatic']) + ' and stir for 30–60 seconds until fragrant.')
-    if stages['spice']:
-        directions.append('Reduce heat to low. Add the measured ' + ', '.join(stages['spice']) + ' and salt. Stir for 20 seconds to bloom the seasonings without burning them.')
+    directions.append('Reduce heat to low. Add the measured ' + ', '.join([*stages['spice'], 'salt']) + '. Stir for 20 seconds to bloom the seasonings without burning them.')
     if stages['tomato']:
         directions.append('Add the chopped tomato. Cook over medium-low heat for 8–10 minutes, stirring frequently, until it breaks down into a thick sauce. If it sticks, reduce the heat and add 1 tablespoon of the water reserved for the base.')
         total_minutes += 10
@@ -216,6 +257,8 @@ def compose_dish(engine, requested, cuisine, index=0):
         directions.append('Fold in the cooked ' + ', '.join(key.replace('_', ' ') for key in non_rice) + '. Toss gently over low heat for 2 minutes until everything is hot and coated in the base.')
     if stages['finish']:
         directions.append('Turn off the heat. Stir in the measured ' + ' and '.join(stages['finish']) + '.')
+    if 'cinnamon' in additions:
+        directions.append('Remove and discard the cinnamon stick pieces before serving.')
     if 'rice' in mains:
         if non_rice and style.base in ('broth', 'coconut', 'cream', 'tomato'):
             directions.append('Divide the cooked rice between two bowls and spoon the hot mixture over it. Taste and adjust salt before serving.')
@@ -235,7 +278,7 @@ def compose_dish(engine, requested, cuisine, index=0):
     return {
         'id': -999 - index, 'title': f'{style.label}-Inspired {title_mains} {form}'.replace('  ', ' '),
         'is_generated': True, 'main_ingredient': mains[0], 'requested_ingredients': requested,
-        'servings': 2, 'model': MODEL_ID, 'cuisine_pole': style.pole,
+        'servings': 2, 'measurement_profile': 'user-portions-v1', 'model': MODEL_ID, 'cuisine_pole': style.pole,
         'generation_method': 'Epicure-Core ingredient centroid and cuisine steering; measured cooking plan',
         'flavour_match_score': None, 'flavour_notes': list(dict.fromkeys(key.replace('_', ' ') for key in [*requested, *selected])),
         'ingredients': ingredient_lines, 'directions': directions,

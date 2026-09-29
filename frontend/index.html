@@ -36,8 +36,8 @@
       <section id="homePage">
         <div class="hero"><h1>What’s cooking?</h1></div>
         <form id="recipeForm" class="query-panel">
-          <label for="query">Ingredients + cuisine</label>
-          <textarea id="query" rows="2" maxlength="500" placeholder="paneer + spinach + north indian" enterkeyhint="go" autocapitalize="none" spellcheck="false" required></textarea>
+          <label for="query">Ingredients & cuisine</label>
+          <textarea id="query" rows="2" maxlength="500" placeholder="paneer spinach north indian" enterkeyhint="go" autocapitalize="none" spellcheck="false" required></textarea>
           <div class="query-actions"><button id="searchButton" type="button" class="text-button">Search collection</button><button id="generateButton" type="submit" class="primary-button">Generate <span aria-hidden="true">↗</span></button></div>
         </form>
         <div class="examples" aria-label="Try an example"><span>Try</span><button type="button" data-query="paneer + spinach + north indian">Paneer & spinach</button><button type="button" data-query="rice + potato + south indian">Rice & potato</button><button type="button" data-query="tofu + mushroom + thai">Tofu & mushroom</button></div>
@@ -58,7 +58,7 @@
   </div>
   <dialog id="guide" aria-labelledby="guideTitle">
     <div class="dialog-heading"><h2 id="guideTitle">Your pantry guide</h2><button id="closeGuide" class="icon-button" aria-label="Close guide"><svg class="icon"><use href="#close"/></svg></button></div>
-    <p>Join ingredients and cuisines with <strong>+</strong>. Up to 8 ingredients and 3 cuisines; one dish per cuisine. Default: Indian.</p>
+    <p>Separate ingredients and cuisines with spaces or <strong>+</strong>. Up to 8 ingredients and 3 cuisines; one dish per cuisine. Default: Indian.</p>
     <p class="guide-example">paneer + spinach + north indian</p>
     <div id="guideContent" aria-live="polite"></div>
     <button id="retryGuide" class="text-button" hidden>Try again</button>

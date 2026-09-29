@@ -40,7 +40,8 @@ export const recommendations = [
       "tomato"
     ],
     "key": "pick-1182",
-    "source": "collection"
+    "source": "collection",
+    "servings": 4
   },
   {
     "title": "Carrot Lemon Rice",
@@ -78,7 +79,8 @@ export const recommendations = [
       "mustard"
     ],
     "key": "pick-1327",
-    "source": "collection"
+    "source": "collection",
+    "servings": 4
   },
   {
     "title": "Spinach & Sun-Dried Tomato Pasta",
@@ -116,7 +118,7 @@ export const recommendations = [
       "pasta"
     ],
     "key": "pick-2149",
-    "source": "collection"
+    "source": "collection",
+    "servings": 4
   }
 ];
-

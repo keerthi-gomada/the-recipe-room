@@ -1,6 +1,7 @@
 import { LIKED_KEY, RECENT_KEY, readRecipes, signature, toggleLiked } from './store.js';
 import { recommendations } from './recommendations.js';
 import { createStepReader } from './speech.js';
+import { scaleRecipe } from './portions.js';
 
 const API_BASE = window.RECIPE_API_BASE || '';
 const $ = id => document.getElementById(id);
@@ -16,7 +17,12 @@ let toastTimer;
 let originPage = '#/';
 const stepPositions = new Map();
 let activeRecipe;
-const cookingSteps = recipe => recipe.directions.flatMap(text => text.replace(/([.!?])\s*(?=[A-Z])/g, '$1\n').split('\n')).map(text=>text.trim()).filter(Boolean);
+const servingChoices = new Map();
+function portioned(recipe) {
+  const choice=servingChoices.get(recipe.key);
+  return choice ? scaleRecipe(recipe,choice.people,choice.base) : scaleRecipe(recipe,recipe.servings,recipe.servings);
+}
+const cookingSteps = recipe => portioned(recipe).directions.flatMap(text => text.replace(/([.!?])\s*(?=[A-Z])/g, '$1\n').split('\n')).map(text=>text.trim()).filter(Boolean);
 const isLiked = recipe => likes.some(item => signature(item) === signature(recipe));
 const findRecipe = key => likes.find(r => r.key === key) || recent.find(r => r.key === key) || recommendations.find(r => r.key === key);
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
@@ -63,10 +69,27 @@ function showRecipe(recipe) {
     $('recipePage').innerHTML = '<div class="empty-state"><h1>Recipe not found.</h1><p>This dish is no longer available on this device.</p><a class="primary-button" href="#/">Explore recipes</a></div>';
     return;
   }
+  const original=recipe;
+  recipe=portioned(original);
   $('recipePage').innerHTML = `<div class="page-heading"><a class="back-link" href="${originPage}">${icon('arrow')}${originPage === '#/liked' ? 'Liked dishes' : 'All dishes'}</a><p class="card-label">${escapeHtml(recipe.cuisine || 'Recipe')}</p><h1 class="detail-title">${escapeHtml(recipe.title)}</h1></div>
     <div class="detail-toolbar"><div class="detail-meta">${[duration(recipe),recipe.servings ? `${recipe.servings} servings` : '',recipe.diet].filter(Boolean).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div>${likeButton(recipe,true)}</div>
     <div class="recipe-content"><section><h2>Ingredients</h2><ul class="ingredients">${recipe.ingredients.map(text=>`<li>${escapeHtml(text)}</li>`).join('')}</ul></section><section class="cooking-section"><h2>Let’s cook</h2><div class="step-card"><div id="stepContent" aria-live="polite" aria-atomic="true"></div><div class="step-controls"><button type="button" class="like-button" id="previousStep">Previous</button><button type="button" class="primary-button" id="nextStep">Next step</button></div></div></section></div>`;
   $('previousStep').addEventListener('click',()=>moveStep(-1));
+  const choice=servingChoices.get(original.key);
+  const base=choice?.base || original.servings || 0;
+  const controls=document.createElement('div');
+  controls.className='portion-controls';
+  controls.innerHTML=`<label>Cooking for <select id="peopleCount" ${base?'':'disabled title="Serving information is unavailable for this recipe"'}>${Array.from({length:7},(_,i)=>`<option value="${i+1}" ${i+1===(choice?.people||base)?'selected':''}>${i+1}</option>`).join('')}</select></label>`;
+  const ingredientHeading=document.querySelector('.recipe-content h2');
+  const ingredientHeader=document.createElement('div');
+  ingredientHeader.className='ingredients-header';
+  ingredientHeading.before(ingredientHeader);
+  ingredientHeader.append(ingredientHeading,controls);
+  $('peopleCount').addEventListener('change',()=>{
+    servingChoices.set(original.key,{base,people:Number($('peopleCount').value)});
+    showRecipe(original);
+    $('peopleCount').focus();
+  });
   $('nextStep').addEventListener('click',()=>moveStep(1));
   const speaker = document.createElement('button');
   speaker.id = 'readStep';
@@ -215,4 +238,6 @@ updateInstall();
 renderCollections();
 route();
 if(!window.RECIPE_NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+
 
