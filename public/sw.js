@@ -1,4 +1,4 @@
-const CACHE = 'epicure-shell-v20';
+const CACHE = 'epicure-shell-v21';
 const SHELL = ['/', '/index.html', '/app.css', '/app.js', '/store.js', '/speech.js', '/portions.js', '/servings.js', '/recommendations.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('epicure-shell-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
