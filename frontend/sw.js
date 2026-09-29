@@ -1,5 +1,5 @@
-const CACHE = 'epicure-shell-v19';
-const SHELL = ['/', '/index.html', '/app.css', '/app.js', '/store.js', '/speech.js', '/portions.js', '/recommendations.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'epicure-shell-v20';
+const SHELL = ['/', '/index.html', '/app.css', '/app.js', '/store.js', '/speech.js', '/portions.js', '/servings.js', '/recommendations.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('epicure-shell-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

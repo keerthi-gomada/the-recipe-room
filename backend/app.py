@@ -1,3 +1,4 @@
+import csv
 import json
 import re
 import faiss
@@ -6,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from generation import generate_dishes, parse_query, METHODS, EXTRAS, STYLES, MODEL_ID
+from generation import generate_dishes, parse_query, METHODS, EXTRAS, STYLES, MODEL_ID, DuplicateIngredientError
 from fastapi.middleware.cors import CORSMiddleware
 from epicure_engine import EpicureEngine
 
@@ -32,6 +33,19 @@ if (BASE_DIR / "recipe_faiss.index").exists() and (BASE_DIR / "recipes_metadata.
     print(f"[✓] Loaded {recipe_index.ntotal} recipes from index.")
 else:
     print("[!] Warning: Run indexer.py first to build FAISS index.")
+
+# Recover yields for older index metadata without rebuilding model embeddings.
+serving_lookup = {}
+if (BASE_DIR / "IndianFoodDatasetCSV.csv").exists():
+    with (BASE_DIR / "IndianFoodDatasetCSV.csv").open(encoding="utf-8-sig", newline="") as dataset:
+        for row in csv.DictReader(dataset):
+            title = (row.get("TranslatedRecipeName") or row.get("RecipeName") or "").strip()
+            try:
+                count = int(row["Servings"])
+            except (ValueError, KeyError):
+                continue
+            if count > 0:
+                serving_lookup.setdefault(title, set()).add(count)
 
 def detect_cuisine_from_query(query_str):
     normalized = query_str.lower().replace('_', ' ')
@@ -87,6 +101,8 @@ def search(
 
     try:
         canonical_tokens, _ = parse_query(q, cuisine)
+    except DuplicateIngredientError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError:
         # Collection search also accepts free text beyond the generation catalog.
         canonical_tokens = engine.extract_canonical_ingredients(q)
@@ -132,6 +148,7 @@ def search(
             "directions": item.get("directions", []),
             "cuisine": item.get("cuisine", "Indian"),
             "prep_time": item.get("prep_time", 30),
+            "servings": item.get("servings") or (next(iter(serving_lookup[item.get("title", "")])) if len(serving_lookup.get(item.get("title", ""), set())) == 1 else None),
             "diet": item.get("diet", "Vegetarian")
         })
 

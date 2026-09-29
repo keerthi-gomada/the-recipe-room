@@ -2,6 +2,7 @@ import { LIKED_KEY, RECENT_KEY, readRecipes, signature, toggleLiked } from './st
 import { recommendations } from './recommendations.js';
 import { createStepReader } from './speech.js';
 import { scaleRecipe } from './portions.js';
+import { recipeServings } from './servings.js';
 
 const API_BASE = window.RECIPE_API_BASE || '';
 const $ = id => document.getElementById(id);
@@ -20,7 +21,7 @@ let activeRecipe;
 const servingChoices = new Map();
 function portioned(recipe) {
   const choice=servingChoices.get(recipe.key);
-  return choice ? scaleRecipe(recipe,choice.people,choice.base) : scaleRecipe(recipe,recipe.servings,recipe.servings);
+  return choice ? scaleRecipe(recipe,choice.people,choice.base) : scaleRecipe(recipe,Math.min(recipeServings(recipe),7),recipeServings(recipe));
 }
 const cookingSteps = recipe => portioned(recipe).directions.flatMap(text => text.replace(/([.!?])\s*(?=[A-Z])/g, '$1\n').split('\n')).map(text=>text.trim()).filter(Boolean);
 const isLiked = recipe => likes.some(item => signature(item) === signature(recipe));
@@ -76,10 +77,10 @@ function showRecipe(recipe) {
     <div class="recipe-content"><section><h2>Ingredients</h2><ul class="ingredients">${recipe.ingredients.map(text=>`<li>${escapeHtml(text)}</li>`).join('')}</ul></section><section class="cooking-section"><h2>Let’s cook</h2><div class="step-card"><div id="stepContent" aria-live="polite" aria-atomic="true"></div><div class="step-controls"><button type="button" class="like-button" id="previousStep">Previous</button><button type="button" class="primary-button" id="nextStep">Next step</button></div></div></section></div>`;
   $('previousStep').addEventListener('click',()=>moveStep(-1));
   const choice=servingChoices.get(original.key);
-  const base=choice?.base || original.servings || 0;
+  const base=choice?.base || recipeServings(original);
   const controls=document.createElement('div');
   controls.className='portion-controls';
-  controls.innerHTML=`<label>Cooking for <select id="peopleCount" ${base?'':'disabled title="Serving information is unavailable for this recipe"'}>${Array.from({length:7},(_,i)=>`<option value="${i+1}" ${i+1===(choice?.people||base)?'selected':''}>${i+1}</option>`).join('')}</select></label>`;
+  controls.innerHTML=`<label>Cooking for <select id="peopleCount" ${base?'':'disabled title="Serving information is unavailable for this recipe"'}>${Array.from({length:7},(_,i)=>`<option value="${i+1}" ${i+1===(choice?.people||Math.min(base,7))?'selected':''}>${i+1}</option>`).join('')}</select></label>`;
   const ingredientHeading=document.querySelector('.recipe-content h2');
   const ingredientHeader=document.createElement('div');
   ingredientHeader.className='ingredients-header';

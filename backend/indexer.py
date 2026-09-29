@@ -51,6 +51,7 @@ for count, (idx, row) in enumerate(df.iterrows(), 1):
             "directions": steps if steps else [str(row['raw_instructions'])],
             "cuisine": str(row['cuisine_tag']).strip(),
             "prep_time": int(row['prep_time']) if pd.notnull(row['prep_time']) else 30,
+            "servings": int(row["Servings"]) if pd.notnull(row.get("Servings")) else None,
             "diet": str(row.get('Diet', 'Vegetarian')),
             "canonical_flavours": canonical_ings
         })
