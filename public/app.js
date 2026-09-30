@@ -173,12 +173,12 @@ async function requestRecipes(generated) {
     });
     const data = await response.json().catch(()=>({}));
     if (!response.ok || data.error) throw new Error(response.status===404 ? 'Recipe generation is unavailable. The backend needs to be updated.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
-    results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:generated?'generated':'collection'}));
+    results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:dish.is_generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
     recent = [...results,...recent.filter(r=>!keys.has(r.key))].slice(0,100);
     try { sessionStorage.setItem(RECENT_KEY, JSON.stringify(recent)); sessionStorage.setItem('recipe-room:results:v1', JSON.stringify(results)); } catch { /* Still usable in this session; liked recipes persist separately. */ }
     renderCollections();
-    $('requestStatus').textContent = results.length ? '' : 'No dishes found. Try another combination.';
+    $('requestStatus').textContent = data.message || (results.length ? '' : 'No dishes found. Try another combination.');
   } catch (error) {
     $('requestStatus').textContent = !navigator.onLine ? 'You’re offline. Your liked dishes are still available.' : error.name==='TimeoutError' ? 'The kitchen is taking longer than usual. Try again shortly.' : error.message;
   } finally {
@@ -195,12 +195,8 @@ async function loadGuide() {
     const response = await fetch(`${API_BASE}/api/ingredients`, {signal:AbortSignal.timeout(30000)});
     const data = await response.json();
     if (!response.ok || !Array.isArray(data.ingredients) || !Array.isArray(data.cuisines)) throw new Error();
-    $('guideContent').innerHTML = [['Generate: main ingredients',data.ingredients],['Generate: condiments and extras',data.additional_ingredients || []],['Generate: cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
-    const collection = strings(data.collection_ingredients);
-    $('guideContent').insertAdjacentHTML('beforeend', `<section class="guide-group"><h3>Search collection</h3><p>Search recipes by their ingredients, including milk and eggs. Generation supports the lists above.</p><input id="guideFilter" type="search" placeholder="Find an ingredient or condiment" aria-label="Filter collection ingredients" style="width:100%;padding:12px"><div id="collectionTags" class="guide-tags" style="max-height:240px;overflow:auto;margin-top:12px"></div></section>`);
-    const render = () => {const query=$('guideFilter').value.trim().toLowerCase();$('collectionTags').innerHTML=collection.filter(name=>name.toLowerCase().includes(query)).map(pantryChip).join('') || '<p>No matching ingredients. If the list is empty, update the backend.</p>';};
-    $('guideFilter').addEventListener('input',render);
-    render();
+    const ingredients = [...new Set([...strings(data.collection_ingredients),...strings(data.ingredients),...strings(data.additional_ingredients)])].sort((a,b)=>a.localeCompare(b));
+    $('guideContent').innerHTML = [['Ingredients and condiments',ingredients],['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
     guideLoaded = true;
   } catch {
     $('guideContent').textContent = 'The pantry guide is unavailable. Reconnect or check that the backend is up to date.';

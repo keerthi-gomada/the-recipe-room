@@ -11,7 +11,7 @@ def words(text):
 def ingredient_catalog(recipes):
     names=set()
     for recipe in recipes:
-        for line in recipe.get('ingredients',[]):
+        for line in [*recipe.get('ingredients',[]), *recipe.get('cleaned_ingredients',[])]:
             name=re.split(r'\s+[-–]\s+',line,maxsplit=1)[0].strip()
             name=re.sub(r'^[\d\s./¼½¾⅓⅔⅛⅜⅝⅞–-]+','',name)
             name=re.sub(r'^(?:(?:cups?|tablespoons?|teaspoons?|tbsp|tsp|grams?|g|kg|ml|litres?|liters?|inches?|inch|cloves?|sprigs?|pieces?|large|small|medium|whole)\s+)+','',name,flags=re.I).strip()
@@ -20,7 +20,7 @@ def ingredient_catalog(recipes):
 
 class CollectionSearch:
     def __init__(self,recipes):
-        self.ingredients=[words(' '.join(r.get('ingredients',[]))) for r in recipes]
+        self.ingredients=[words(' '.join([*r.get('ingredients',[]), *r.get('cleaned_ingredients',[])])) for r in recipes]
         self.titles=[words(r.get('title','')) for r in recipes]
         self.cuisines=[words(r.get('cuisine','')) for r in recipes]
     def rank(self,query,cuisine_names,semantic_ids,limit):

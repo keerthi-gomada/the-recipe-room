@@ -48,8 +48,17 @@ if (BASE_DIR / "IndianFoodDatasetCSV.csv").exists():
             if count > 0:
                 serving_lookup.setdefault(title, set()).add(count)
 
+# Supplement search with the uploaded dataset's actual ingredient columns.
+pantry_rows = []
+if (BASE_DIR / 'pantry_dataset.json').exists():
+    pantry_rows = json.loads((BASE_DIR / 'pantry_dataset.json').read_text(encoding='utf-8'))
+    by_title = {row['title'].strip().casefold(): row for row in recipe_metadata}
+    for row in pantry_rows:
+        existing = by_title.get(row['title'].strip().casefold())
+        if existing is not None:
+            existing.setdefault('cleaned_ingredients', []).extend(row['cleaned_ingredients'])
 collection_search = CollectionSearch(recipe_metadata)
-collection_ingredients = ingredient_catalog(recipe_metadata)
+collection_ingredients = ingredient_catalog([*recipe_metadata, *pantry_rows])
 
 def detect_cuisine_from_query(query_str):
     normalized = query_str.lower().replace('_', ' ')
@@ -84,8 +93,16 @@ def generate(request: GenerationRequest):
         raise HTTPException(status_code=422, detail="Provide either q or main_ingredient, containing ingredients + cuisine.")
     try:
         dishes = generate_dishes(engine, request.q if request.q is not None else request.main_ingredient, request.cuisine)
-    except ValueError as exc:
+    except DuplicateIngredientError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        if not str(exc).startswith(('Unsupported ingredients', 'Add at least one main ingredient')):
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        result = search(q=request.q or request.main_ingredient, cuisine=request.cuisine,
+                        top_k=24, include_generated=False)
+        result['message'] = ('Showing matching collection recipes for these ingredients.' if result['recipes']
+                             else 'No collection recipe matches all these ingredients. Try fewer ingredients.')
+        return result
     return {"recipes": dishes, "count": len(dishes), "model": MODEL_ID,
             "detected_cuisine": ', '.join(dish['cuisine'] for dish in dishes),
             "matched_canonical_ingredients": [key.replace('_', ' ') for key in dishes[0]['requested_ingredients']]}
