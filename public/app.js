@@ -14,6 +14,15 @@ let results = readRecipes({getItem: key => sessionStorage.getItem(key)}, 'recipe
 let currentPage = '';
 let loading = false;
 let guideLoaded = false;
+const pantrySelections = new Map();
+const pantryKey = text => text.trim().toLowerCase().replace(/\s+/g,' ');
+function pantryChip(text) {
+  return `<button type="button" data-pantry="${escapeHtml(text)}" aria-pressed="${pantrySelections.has(pantryKey(text))}">${escapeHtml(text)}</button>`;
+}
+function updatePantrySelection() {
+  document.querySelectorAll('[data-pantry]').forEach(button=>button.setAttribute('aria-pressed',String(pantrySelections.has(pantryKey(button.dataset.pantry)))));
+  $('pantrySelectionStatus').textContent=pantrySelections.size ? `${pantrySelections.size} selected · Added when you close` : 'Select ingredients, then close to add them.';
+}
 let toastTimer;
 let originPage = '#/';
 const stepPositions = new Map();
@@ -186,10 +195,10 @@ async function loadGuide() {
     const response = await fetch(`${API_BASE}/api/ingredients`, {signal:AbortSignal.timeout(30000)});
     const data = await response.json();
     if (!response.ok || !Array.isArray(data.ingredients) || !Array.isArray(data.cuisines)) throw new Error();
-    $('guideContent').innerHTML = [['Generate: main ingredients',data.ingredients],['Generate: condiments and extras',data.additional_ingredients || []],['Generate: cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div></section>`).join('');
+    $('guideContent').innerHTML = [['Generate: main ingredients',data.ingredients],['Generate: condiments and extras',data.additional_ingredients || []],['Generate: cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
     const collection = strings(data.collection_ingredients);
     $('guideContent').insertAdjacentHTML('beforeend', `<section class="guide-group"><h3>Search collection</h3><p>Search recipes by their ingredients, including milk and eggs. Generation supports the lists above.</p><input id="guideFilter" type="search" placeholder="Find an ingredient or condiment" aria-label="Filter collection ingredients" style="width:100%;padding:12px"><div id="collectionTags" class="guide-tags" style="max-height:240px;overflow:auto;margin-top:12px"></div></section>`);
-    const render = () => {const query=$('guideFilter').value.trim().toLowerCase();$('collectionTags').innerHTML=collection.filter(name=>name.toLowerCase().includes(query)).map(name=>`<span>${escapeHtml(name)}</span>`).join('') || '<p>No matching ingredients. If the list is empty, update the backend.</p>';};
+    const render = () => {const query=$('guideFilter').value.trim().toLowerCase();$('collectionTags').innerHTML=collection.filter(name=>name.toLowerCase().includes(query)).map(pantryChip).join('') || '<p>No matching ingredients. If the list is empty, update the backend.</p>';};
     $('guideFilter').addEventListener('input',render);
     render();
     guideLoaded = true;
@@ -219,7 +228,27 @@ document.addEventListener('click',event=>{
     announce(saved.liked ? 'Saved to Liked.' : 'Removed from Liked.');
   } catch { announce('Couldn’t save this dish. Device storage may be full or disabled.'); }
 });
-$('guideButton').addEventListener('click',()=>{$('guide').showModal();loadGuide();});
+$('guideButton').addEventListener('click',()=>{pantrySelections.clear();updatePantrySelection();$('guide').showModal();loadGuide();});
+$('guideContent').addEventListener('click',event=>{
+  const button=event.target.closest('[data-pantry]');
+  if(!button)return;
+  const name=button.dataset.pantry,key=pantryKey(name);
+  if(pantrySelections.has(key))pantrySelections.delete(key);
+  else pantrySelections.set(key,name);
+  updatePantrySelection();
+});
+$('guide').addEventListener('close',()=>{
+  if(!pantrySelections.size)return;
+  let query=$('query').value.trim();
+  for(const [key,name] of pantrySelections){
+    const existing=pantryKey(query).replace(/_/g,' ');
+    const escaped=key.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    if(!new RegExp(`(^|[\\s+,])${escaped}($|[\\s+,])`,'i').test(existing))query += (query?' + ':'')+name;
+  }
+  $('query').value=query;
+  pantrySelections.clear();
+  if(currentPage!=='home')location.hash='#/';
+});
 $('closeGuide').addEventListener('click',()=>$('guide').close());
 $('retryGuide').addEventListener('click',loadGuide);
 $('guide').addEventListener('click',event=>{if(event.target===$('guide')){const r=$('guide').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)$('guide').close();}});
