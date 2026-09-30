@@ -14,6 +14,19 @@ GROUPS = {
 ALIASES = {'brinjal':'eggplant','aubergine':'eggplant','capsicum':'bell pepper','palak':'spinach','bhindi':'okra','curd':'yogurt','yoghurt':'yogurt','besan':'gram flour','maida':'all purpose flour','atta':'whole wheat flour','jeera':'cumin','cumin seed':'cumin','coriander seed':'coriander seed','dhania leaf':'coriander leaf','coriander':'coriander leaf','kasuri methi':'fenugreek leaf','red chilli':'chilli','green chilli':'chilli','cloves garlic':'garlic'}
 def clean_name(line):
     text=line.lower().replace('_',' ')
+    if re.search(r'\b(?:cotton|thread|toothpick|skewer|foil|parchment|coal|charcoal|equipment)\b',text):
+        return ''
+    text=re.sub(r'\b(?:as per (?:the experiment|taste|use|requirement)|as much as|according to taste|as needed|as required)\b',' ',text)
+    text=re.sub(r'^(?:\s*(?:of|or|and)\s+)+','',text)
+    text=re.sub(r'\b(?:leaves|leave)\b','leaf',text)
+    text=re.sub(r'\b(?:strawberries|strawberrie)\b','strawberry',text)
+    text=re.sub(r'\bblueberries\b','blueberry',text)
+    text=re.sub(r'\basafetida\b','asafoetida',text)
+    text=re.sub(r'\b(?:chili|chile)\b','chilli',text)
+    text=re.sub(r'\b(?:arhar|tur) dal\b','toor dal',text)
+    text=re.sub(r'\bkalonji\b','nigella',text)
+    text=re.sub(r'\boatmeal\b','oat',text)
+    text=re.sub(r'\bnugget curry leaf\b','curry leaf',text)
     text=re.split(r'\s+[-–]\s+|\b(?:for|to taste|as required|as needed)\b',text)[0]
     text=re.sub(r'\([^)]*\)',' ',text)
     text=re.sub(r'[\d¼½¾⅓⅔⅛⅜⅝⅞./+–-]+',' ',text)
@@ -23,6 +36,8 @@ def clean_name(line):
     text=re.sub(r'\btomatoes\b','tomato',text)
     text=re.sub(r'\b(?:chilies|chillies)\b','chilli',text)
     text=re.sub(r'\b([a-z]{3,})s\b',lambda m:m[0] if m[0].endswith(('ss','us')) else m[1],text)
+    text=re.sub(r'^(?:(?:of|or|and)\s+)+','',text).strip()
+    if text in {'as per', 'taste', 'use', 'experiment', 'required', 'needed'}:return ''
     return text
 
 def pantry_groups(lines):
