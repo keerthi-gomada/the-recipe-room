@@ -1,3 +1,4 @@
+from collection_search import CollectionSearch, ingredient_catalog
 import csv
 import json
 import re
@@ -47,6 +48,9 @@ if (BASE_DIR / "IndianFoodDatasetCSV.csv").exists():
             if count > 0:
                 serving_lookup.setdefault(title, set()).add(count)
 
+collection_search = CollectionSearch(recipe_metadata)
+collection_ingredients = ingredient_catalog(recipe_metadata)
+
 def detect_cuisine_from_query(query_str):
     normalized = query_str.lower().replace('_', ' ')
     for name in sorted(STYLES, key=len, reverse=True):
@@ -71,6 +75,7 @@ def supported_ingredients():
     return {"ingredients": [key.replace('_', ' ') for key in METHODS],
             "additional_ingredients": [key.replace('_', ' ') for key in EXTRAS],
             "cuisines": list(STYLES), "model": MODEL_ID,
+            "collection_ingredients": collection_ingredients,
             "max_ingredients": 8, "max_cuisines": 3}
 
 @app.post("/api/generate")
@@ -121,6 +126,9 @@ def search(
 
     scores, indices = recipe_index.search(query_vec, top_k)
 
+    semantic_scores = {int(idx): float(score) for idx, score in zip(indices[0], scores[0])}
+    collection_ids = collection_search.rank(q, STYLES, indices[0], top_k)
+
     results = []
     generation_warning = None
 
@@ -132,11 +140,12 @@ def search(
             generation_warning = str(exc)
 
     # 2. Append dataset retrieved dishes
-    for score, idx in zip(scores[0], indices[0]):
+    for idx in collection_ids:
+        score = semantic_scores.get(int(idx))
         if idx < 0 or idx >= len(recipe_metadata):
             continue
         item = recipe_metadata[idx]
-        flavour_match_pct = round(max(float(score), 0.0) * 100, 1)
+        flavour_match_pct = round(max(float(score), 0.0) * 100, 1) if score is not None else None
 
         results.append({
             "id": int(idx),

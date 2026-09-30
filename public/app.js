@@ -186,7 +186,12 @@ async function loadGuide() {
     const response = await fetch(`${API_BASE}/api/ingredients`, {signal:AbortSignal.timeout(30000)});
     const data = await response.json();
     if (!response.ok || !Array.isArray(data.ingredients) || !Array.isArray(data.cuisines)) throw new Error();
-    $('guideContent').innerHTML = [['Main ingredients',data.ingredients],['Extras',data.additional_ingredients || []],['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div></section>`).join('');
+    $('guideContent').innerHTML = [['Generate: main ingredients',data.ingredients],['Generate: condiments and extras',data.additional_ingredients || []],['Generate: cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div></section>`).join('');
+    const collection = strings(data.collection_ingredients);
+    $('guideContent').insertAdjacentHTML('beforeend', `<section class="guide-group"><h3>Search collection</h3><p>Search recipes by their ingredients, including milk and eggs. Generation supports the lists above.</p><input id="guideFilter" type="search" placeholder="Find an ingredient or condiment" aria-label="Filter collection ingredients" style="width:100%;padding:12px"><div id="collectionTags" class="guide-tags" style="max-height:240px;overflow:auto;margin-top:12px"></div></section>`);
+    const render = () => {const query=$('guideFilter').value.trim().toLowerCase();$('collectionTags').innerHTML=collection.filter(name=>name.toLowerCase().includes(query)).map(name=>`<span>${escapeHtml(name)}</span>`).join('') || '<p>No matching ingredients. If the list is empty, update the backend.</p>';};
+    $('guideFilter').addEventListener('input',render);
+    render();
     guideLoaded = true;
   } catch {
     $('guideContent').textContent = 'The pantry guide is unavailable. Reconnect or check that the backend is up to date.';
