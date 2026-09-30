@@ -196,7 +196,7 @@ async function loadGuide() {
     const data = await response.json();
     if (!response.ok || !Array.isArray(data.ingredients) || !Array.isArray(data.cuisines)) throw new Error();
     const ingredients = [...new Set([...strings(data.collection_ingredients),...strings(data.ingredients),...strings(data.additional_ingredients)])].sort((a,b)=>a.localeCompare(b));
-    $('guideContent').innerHTML = [['Ingredients and condiments',ingredients],['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
+    $('guideContent').innerHTML = [...(Array.isArray(data.pantry_groups) ? data.pantry_groups.map(group=>[group.name,group.ingredients]) : [['Ingredients and condiments',ingredients]]),['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
     guideLoaded = true;
   } catch {
     $('guideContent').textContent = 'The pantry guide is unavailable. Reconnect or check that the backend is up to date.';

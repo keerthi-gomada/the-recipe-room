@@ -1,4 +1,5 @@
 from collection_search import CollectionSearch, ingredient_catalog
+from pantry import pantry_groups
 import csv
 import json
 import re
@@ -85,6 +86,7 @@ def supported_ingredients():
             "additional_ingredients": [key.replace('_', ' ') for key in EXTRAS],
             "cuisines": list(STYLES), "model": MODEL_ID,
             "collection_ingredients": collection_ingredients,
+            "pantry_groups": pantry_groups([*collection_ingredients, *METHODS, *EXTRAS]),
             "max_ingredients": 8, "max_cuisines": 3}
 
 @app.post("/api/generate")
