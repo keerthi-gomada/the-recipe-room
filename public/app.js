@@ -4,7 +4,8 @@ import { createStepReader } from './speech.js';
 import { scaleRecipe } from './portions.js';
 import { recipeServings } from './servings.js';
 
-const API_BASE = window.RECIPE_API_BASE || '';
+import { requestApi } from './api.js';
+const API_BASE = window.RECIPE_API_BASE || (location.hostname.endsWith('.vercel.app') ? 'https://reciperoom-backend.onrender.com' : '');
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 const strings = value => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []).map(String);
@@ -167,12 +168,11 @@ async function requestRecipes(generated) {
   $('recipeForm').setAttribute('aria-busy','true');
   $('requestStatus').textContent = generated ? 'Finding your next favourite…' : 'Searching the collection…';
   try {
-    const response = await fetch(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
+    const response = await requestApi(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
       ...(generated ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})} : {}),
-      signal: AbortSignal.timeout(60000)
-    });
+    }, () => {$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
     const data = await response.json().catch(()=>({}));
-    if (!response.ok || data.error) throw new Error(response.status===404 ? 'Recipe generation is unavailable. The backend needs to be updated.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
+    if (!response.ok || data.error) throw new Error(response.status===404 ? 'This recipe API address was not found (404). Check the deployed API route.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
     results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:dish.is_generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
     recent = [...results,...recent.filter(r=>!keys.has(r.key))].slice(0,100);
@@ -192,14 +192,14 @@ async function loadGuide() {
   $('guideContent').textContent = 'Loading pantry…';
   $('retryGuide').hidden = true;
   try {
-    const response = await fetch(`${API_BASE}/api/ingredients`, {signal:AbortSignal.timeout(30000)});
+    const response = await requestApi(`${API_BASE}/api/ingredients`, {}, () => {$('guideContent').textContent='The recipe server is waking up. Retrying…';});
     const data = await response.json();
     if (!response.ok || !Array.isArray(data.ingredients) || !Array.isArray(data.cuisines)) throw new Error();
     const ingredients = [...new Set([...strings(data.collection_ingredients),...strings(data.ingredients),...strings(data.additional_ingredients)])].sort((a,b)=>a.localeCompare(b));
     $('guideContent').innerHTML = [...(Array.isArray(data.pantry_groups) ? data.pantry_groups.map(group=>[group.name,group.ingredients]) : [['Ingredients and condiments',ingredients]]),['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
     guideLoaded = true;
   } catch {
-    $('guideContent').textContent = 'The pantry guide is unavailable. Reconnect or check that the backend is up to date.';
+    $('guideContent').textContent = 'The recipe server did not respond. It may still be starting. Please try again shortly.';
     $('retryGuide').hidden = false;
   }
 }
