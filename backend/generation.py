@@ -13,7 +13,7 @@ GRAMS_PER_PERSON = {
     'potato': 150, 'cauliflower': 150, 'carrot': 100, 'broccoli': 150,
     'mushroom': 150, 'spinach': 100, 'paneer': 120, 'tofu': 120,
     'chickpea': 150, 'bell_pepper': 100, 'zucchini': 150, 'eggplant': 150,
-    'pea': 100, 'chicken': 150, 'rice': 75,
+    'pea': 100, 'chicken': 150, 'rice': 75, 'lamb': 150, 'fish': 150,
 }
 
 @dataclass(frozen=True)
@@ -27,6 +27,10 @@ class Method:
 # Cook components before combining so roots, leafy greens and proteins do not
 # receive the same arbitrary simmer time. Water quantities are per component.
 METHODS = {
+    'egg': Method('large eggs, beaten just before cooking', 'Add the beaten eggs to the skillet. Cook over medium-low heat, stirring gently, until fully set with no runny egg remaining. Transfer to a clean plate.', 6, oil=True),
+    'lamb': Method('boneless lamb leg, cut into thin strips', 'Cook the lamb strips in a single layer over medium-high heat, turning often, for about 6–10 minutes. Check the thickest pieces reach 63°C / 145°F, then rest for at least 3 minutes. Cook in batches if needed; use clean utensils for the cooked meat.', 13, oil=True),
+    'fish': Method('boneless white fish fillets, cut into large pieces and checked for bones', 'Cook the fish over medium heat for about 3–5 minutes per side, turning carefully. Check the thickest part reaches 63°C / 145°F and flakes easily. Keep the pieces intact and use clean utensils for the cooked fish.', 12, oil=True),
+    'milk': Method('pasteurized whole milk', 'Warm the milk in a separate saucepan over low heat, stirring, until steaming. Do not boil. Keep warm for the sauce.', 5),
     'potato': Method('peeled and cut into 1.5 cm cubes', 'Simmer the potato in its measured water over medium heat for 12–15 minutes until a fork slides easily into the cubes. Drain.', 18, 750),
     'cauliflower': Method('cut into small florets', 'Simmer the cauliflower in its measured water over medium heat for 5–7 minutes until just fork-tender. Drain well.', 10, 750),
     'carrot': Method('peeled and sliced 5 mm thick', 'Simmer the carrot in its measured water over medium heat for 8–10 minutes until fork-tender. Drain.', 13, 750),
@@ -100,6 +104,7 @@ STYLES = {
     'mexican': Style('Mexican', 'cuisine:Latin_American', 'tomato', ('tomato', 'garlic', 'lime'), ('cumin', 'paprika', 'oregano')),
 }
 ALIASES = {
+    'eggs': 'egg', 'whole eggs': 'egg', 'whole milk': 'milk', 'fish fillet': 'fish', 'fish fillets': 'fish', 'lamb meat': 'lamb',
     'potatoes': 'potato', 'carrots': 'carrot', 'mushrooms': 'mushroom',
     'chickpeas': 'chickpea', 'basmati rice': 'rice', 'basmati_rice': 'rice',
     'bell peppers': 'bell_pepper', 'capsicum': 'bell_pepper', 'peas': 'pea',
@@ -207,20 +212,26 @@ def compose_dish(engine, requested, cuisine, index=0):
     # A keyed ingredient plan prevents duplicate pantry or requested ingredients.
     additions = dict.fromkeys(['onion', *style.essentials,
                               *(key for key in requested if key in EXTRAS), *selected])
-    non_rice = [key for key in mains if key != 'rice']
+    if 'milk' in mains:
+        if any(key in requested for key in ('tomato', 'lemon', 'lime')):
+            raise ValueError('For a smooth milk sauce, leave out tomato, lemon and lime, or use coconut milk instead.')
+        additions = {key: value for key, value in additions.items() if key not in ('tomato', 'lemon', 'lime', 'coconut_milk')}
+        if mains == ['milk']:
+            mains.append('rice')
+    non_rice = [key for key in mains if key not in ('rice', 'milk')]
     ingredient_lines = []
     directions = ['Measure and prepare all ingredients as listed. This recipe serves 2. Use a pan large enough for the measured amounts, or cook in batches without crowding. Keep each cooked component covered while preparing the next; combine and serve promptly.']
     total_minutes = 10
     for key in mains:
         method = METHODS[key]
-        grams = GRAMS_PER_PERSON[key] * 2
         name = key.replace('_', ' ')
-        ingredient_lines.append(f'{grams} g {name} ({method.preparation})')
+        quantity = '4 eggs' if key == 'egg' else '200 ml milk' if key == 'milk' else f'{GRAMS_PER_PERSON[key] * 2} g {name}'
+        ingredient_lines.append(f'{quantity} ({method.preparation})')
         if method.water:
             ingredient_lines.append(f'{method.water} ml water for the {name}')
         if method.oil:
             ingredient_lines.append(f'1 teaspoon {style.oil} for the {name}')
-        if key == 'rice':
+        if key in ('rice', 'milk'):
             intro = ''
         elif method.water and not method.oil:
             intro = f'Bring the {method.water} ml water for the {name} to a boil in a small saucepan. '
@@ -248,9 +259,11 @@ def compose_dish(engine, requested, cuisine, index=0):
     base_water = {'dry': 30, 'tomato': 60, 'broth': 180, 'coconut': 60, 'cream': 60, 'soy': 30}[style.base]
     ingredient_lines.append(f'{base_water} ml water for the flavour base')
     liquid_names = list(stages['liquid'])
-    if style.base == 'cream':
+    if style.base == 'cream' and 'milk' not in mains:
         ingredient_lines.append('60 ml single cream')
         liquid_names.append('single cream')
+    if 'milk' in mains:
+        liquid_names.append('the warmed milk, poured in slowly while stirring')
     liquids = ', '.join(liquid_names + ['the remaining measured water for the base'])
     directions.append(f'Add {liquids}. Bring to a gentle simmer over medium-low heat and cook for 3–4 minutes, stirring. Avoid a rolling boil' + (' so the coconut milk stays smooth.' if 'coconut_milk' in additions else '.'))
     if non_rice:
@@ -270,7 +283,7 @@ def compose_dish(engine, requested, cuisine, index=0):
         form = {'dry': 'Skillet', 'tomato': 'Tomato Braise', 'broth': 'Light Stew',
                 'coconut': 'Coconut Stew', 'cream': 'Creamy Braise', 'soy': 'Ginger-Soy Skillet'}[style.base]
         directions.append('Taste and adjust the salt if needed. Divide between two plates and serve warm.')
-    diet = 'Non-vegetarian' if 'chicken' in mains else ('Vegetarian' if 'paneer' in mains or style.oil == 'ghee' or style.base == 'cream' else 'Vegan')
+    diet = 'Non-vegetarian' if any(key in mains for key in ('chicken', 'lamb', 'fish', 'egg')) else ('Vegetarian' if any(key in mains for key in ('paneer', 'milk')) or style.oil == 'ghee' or style.base == 'cream' else 'Vegan')
     title_keys = non_rice if 'rice' in mains else mains
     title_mains = ' & '.join(key.replace('_', ' ').title() for key in title_keys[:3])
     if len(title_keys) > 3:
