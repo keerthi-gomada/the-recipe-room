@@ -41,12 +41,14 @@
           <label for="query" class="manual-label">Or type ingredients</label>
           <textarea id="query" rows="1" maxlength="500" placeholder="e.g. paneer, spinach, tomato" enterkeyhint="go" autocapitalize="none" spellcheck="false"></textarea>
           <div id="detectedIngredients" class="detected-ingredients" hidden></div>
+        <div id="scanProgress" class="scan-progress" hidden role="status" aria-live="polite"><span class="scan-orbit" aria-hidden="true"></span><strong id="scanProgressTitle">Scanning ingredients</strong><span id="scanProgressText">Looking closely at your photo…</span></div>
           <div class="query-actions"><button id="searchButton" type="button" class="text-button">Search recipes</button><button id="generateButton" type="submit" class="primary-button">Find recipes <span aria-hidden="true">↗</span></button></div>
         </form>
         <p id="requestStatus" class="status" role="status" aria-live="polite"></p>
         <div id="resultsHeading" class="section-heading" hidden><h2>Recipes</h2><span id="resultsCount"></span></div>
         <div id="resultsGrid" class="recipe-grid"></div>
       </section>
+      <section id="resultsPage" hidden aria-labelledby="scanResultsTitle"><div class="page-heading"><button id="backToScanner" class="back-link" type="button"><svg class="icon"><use href="#arrow"/></svg>Scan again</button><h1 id="scanResultsTitle">Recipes for your ingredients</h1><p id="scanResultsSummary"></p></div><div id="scanResultsIngredients" class="detected-ingredients"></div><div id="scanResultsGrid" class="recipe-grid"></div><div id="scanResultsEmpty" class="empty-state" hidden><h2>No recipes came through.</h2><p>Try another photo or adjust the ingredients.</p><button type="button" class="primary-button" id="scanAgainButton">Scan again</button></div></section>
       <section id="likedPage" hidden aria-labelledby="likedHeading">
         <div class="page-heading"><a class="back-link" href="#/"><svg class="icon"><use href="#arrow"/></svg>Explore</a><h1 id="likedHeading">Liked dishes</h1><p>Liked recipes, saved on this device.</p></div>
         <div id="likedGrid" class="recipe-grid"></div>

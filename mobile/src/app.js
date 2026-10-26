@@ -64,8 +64,8 @@ function card(recipe) {
   return `<article class="recipe-card${recipe.source==='generated'?' generated-card':''}"><a class="card-link" href="#/recipe/${encodeURIComponent(recipe.key)}"><p class="card-label">${recipe.source==='generated'?'Generated · ':''}${escapeHtml(recipe.cuisine || 'Recipe')}</p><h3>${escapeHtml(recipe.title)}</h3><p class="card-meta">${escapeHtml(meta)} <span aria-hidden="true">↗</span></p></a>${likeButton(recipe)}</article>`;
 }
 function renderCollections() {
-  $('recommendationsGrid').innerHTML = recommendations.map(card).join('');
   $('resultsGrid').innerHTML = results.map(card).join('');
+  if($('scanResultsGrid')) $('scanResultsGrid').innerHTML=results.map(card).join('');
   $('resultsHeading').hidden = !results.length;
   $('resultsCount').textContent = `${results.length} ${results.length === 1 ? 'dish' : 'dishes'}`;
   $('likedGrid').innerHTML = likes.map(card).join('');
@@ -138,9 +138,12 @@ function moveStep(delta) {
 function route() {
   stepReader.stop();
   const hash = location.hash || '#/';
-  const page = hash.startsWith('#/recipe/') ? 'recipe' : hash === '#/liked' ? 'liked' : 'home';
-  if (page === 'recipe' && currentPage !== 'recipe') originPage = currentPage === 'liked' ? '#/liked' : '#/';
-  for (const name of ['home','liked','recipe']) $(name+'Page').hidden = name !== page;
+  const page = hash.startsWith('#/recipe/') ? 'recipe' : hash === '#/liked' ? 'liked' : hash === '#/results' ? 'results' : 'home';
+  if (page === 'recipe' && currentPage !== 'recipe') originPage = currentPage === 'liked' ? '#/liked' : currentPage==='results' ? '#/results' : '#/';
+  for (const name of ['home','liked','recipe','results']) $(name+'Page').hidden = name !== page;
+  $('scanResultsSummary').textContent=results.length?`${results.length} recipe${results.length===1?'':'s'} found from your pantry scan.`:'Your scan is ready.';
+  $('scanResultsIngredients').innerHTML=$('query').value.split('+').map(item=>item.trim()).filter(Boolean).map(name=>`<span class="ingredient-pill">${escapeHtml(name)}</span>`).join('');
+  $('scanResultsEmpty').hidden=results.length>0;
   $('likedNav').toggleAttribute('aria-current', page === 'liked');
   if (page === 'liked') $('likedNav').setAttribute('aria-current', 'page');
   if (page === 'recipe') {
@@ -149,7 +152,7 @@ function route() {
     const recipe = findRecipe(key);
     showRecipe(recipe);
     document.title = recipe ? `${recipe.title} · The Recipe Room` : 'Recipe not found · The Recipe Room';
-  } else document.title = page === 'liked' ? 'Liked · The Recipe Room' : 'The Recipe Room';
+  } else document.title = page === 'liked' ? 'Liked · The Recipe Room' : page==='results' ? 'Recipes for your ingredients · The Recipe Room' : 'The Recipe Room';
   currentPage = page;
   window.scrollTo(0,0);
   $('main').focus({preventScroll:true});
@@ -169,23 +172,23 @@ async function requestRecipes(generated) {
   $('requestStatus').textContent = generated ? 'Finding your next favourite…' : 'Searching the collection…';
   try {
     const scanned=$('photoPreview').hidden===false;
-    let response = await requestApi(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
-      ...(generated ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})} : {}),
-    }, () => {$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
-    const data = await response.json().catch(()=>({}));
-    if (!response.ok || data.error) throw new Error(response.status===404 ? 'This recipe API address was not found (404). Check the deployed API route.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
-    if(scanned){
-      response=await requestApi(`${API_BASE}/api/scan-recipes?q=${encodeURIComponent(query)}`);
-      const scanData=await response.json().catch(()=>({}));
-      if(!response.ok)throw new Error(scanData.detail||'Couldn’t search recipes for these ingredients.');
-      if(scanData.recipes?.length){data.recipes=scanData.recipes;data.message=`Found recipes with at least ${Math.min(2,query.split(/[+,]/).filter(Boolean).length)} of your ingredients.`;}
-      else {
-        response=await requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})});
-        const generatedData=await response.json().catch(()=>({}));
-        if(!response.ok)throw new Error(generatedData.detail||'No collection recipes matched and a recipe could not be generated for these ingredients.');
-        Object.assign(data,generatedData);
-        data.message='No close collection match found. Here’s a recipe made with your ingredients.';
-      }
+    const ingredientCount=query.split('+').map(item=>item.trim()).filter(Boolean).length;
+    const postGenerate=()=>requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})},()=>{$('scanProgressText').textContent='The recipe kitchen is waking up…';});
+    let response,data;
+    if(scanned&&ingredientCount<=3){
+      $('scanProgressTitle').textContent='Creating your recipe';$('scanProgressText').textContent='Three or fewer ingredients found · Epicure is composing a dish…';
+      response=await postGenerate();data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.detail||'Couldn’t generate a recipe from these ingredients.');
+      data.message='Epicure created a recipe using your scanned ingredients.';
+    }else if(scanned){
+      $('scanProgressTitle').textContent='Finding matching recipes';$('scanProgressText').textContent=`Checking recipes for at least 2 of your ${ingredientCount} ingredients…`;
+      response=await requestApi(`${API_BASE}/api/scan-recipes?q=${encodeURIComponent(query)}`);data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.detail||'Couldn’t search recipes for these ingredients.');
+      if(data.recipes?.length)data.message=`Found recipes that use at least two of your ingredients.`;
+      else{ $('scanProgressTitle').textContent='Creating your recipe';$('scanProgressText').textContent='No close collection match. Epicure is composing a dish…';response=await postGenerate();const generatedData=await response.json().catch(()=>({}));if(!response.ok)throw new Error(generatedData.detail||'No matching recipe found and generation failed.');data=generatedData;data.message='No close collection match found. Epicure created a recipe using your ingredients.';}
+    }else{
+      response=await requestApi(generated?`${API_BASE}/api/generate`:`${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`,{...(generated?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})}:{})},()=>{$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
+      data=await response.json().catch(()=>({}));if(!response.ok||data.error)throw new Error(response.status===404?'Recipe API address was not found (404).':typeof data.detail==='string'?data.detail:data.error||'Couldn’t load recipes.');
     }
     results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:dish.is_generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
@@ -193,12 +196,14 @@ async function requestRecipes(generated) {
     try { sessionStorage.setItem(RECENT_KEY, JSON.stringify(recent)); sessionStorage.setItem('recipe-room:results:v1', JSON.stringify(results)); } catch { /* Still usable in this session; liked recipes persist separately. */ }
     renderCollections();
     $('requestStatus').textContent = data.message || (results.length ? '' : 'No dishes found. Try another combination.');
+    if(scanned){$('scanProgress').hidden=true;location.hash='#/results';}
   } catch (error) {
     $('requestStatus').textContent = !navigator.onLine ? 'You’re offline. Your liked dishes are still available.' : error.name==='TimeoutError' ? 'The kitchen is taking longer than usual. Try again shortly.' : error.message;
   } finally {
     loading = false;
     $('generateButton').disabled = $('searchButton').disabled = false;
     $('recipeForm').removeAttribute('aria-busy');
+    $('scanProgress').hidden=true;
   }
 }
 function setDetectedIngredients(names) {
@@ -221,7 +226,8 @@ async function scanPhoto(file) {
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.detail||'Couldn’t identify ingredients in this photo.');
       setDetectedIngredients(strings(data.ingredients));
-      $('requestStatus').textContent=data.ingredients?.length?'Review the ingredients, remove anything that looks wrong, then find recipes.':'No pantry ingredients were clear in this photo. Try another angle or type them below.';
+      if(data.ingredients?.length){$('scanProgress').hidden=false;$('scanProgressTitle').textContent='Ingredients identified';$('scanProgressText').textContent=`${data.ingredients.length} ingredient${data.ingredients.length===1?'':'s'} found. Preparing recipes…`;await requestRecipes(true);}
+      else $('requestStatus').textContent='No pantry ingredients were clear in this photo. Try another angle or type them below.';
     }catch(error){$('requestStatus').textContent=error.message;}
     finally{$('generateButton').disabled=false;}
   };
@@ -245,6 +251,8 @@ async function loadGuide() {
 }
 $('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(true);});
 $('searchButton').addEventListener('click',()=>requestRecipes(false));
+$('backToScanner').addEventListener('click',()=>{location.hash='#/';$('ingredientPhoto').focus();});
+$('scanAgainButton').addEventListener('click',()=>location.hash='#/');
 $('ingredientPhoto').addEventListener('change',event=>scanPhoto(event.target.files?.[0]));
 $('changePhoto').addEventListener('click',()=>$('ingredientPhoto').click());
 $('detectedIngredients').addEventListener('click',event=>{const button=event.target.closest('[data-remove-ingredient]');if(!button)return;const names=strings($('query').value.split('+').map(item=>item.trim()).filter(Boolean));names.splice(Number(button.dataset.removeIngredient),1);setDetectedIngredients(names);});
