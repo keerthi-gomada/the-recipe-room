@@ -1,8 +1,11 @@
 import { LIKED_KEY, RECENT_KEY, readRecipes, signature, toggleLiked } from './store.js';
 import { recommendations } from './recommendations.js';
 import { createStepReader } from './speech.js';
+import { scaleRecipe } from './portions.js';
+import { recipeServings } from './servings.js';
 
-const API_BASE = window.RECIPE_API_BASE || '';
+import { requestApi } from './api.js';
+const API_BASE = window.RECIPE_API_BASE || (location.hostname.endsWith('.vercel.app') ? 'https://reciperoom-backend.onrender.com' : '');
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 const strings = value => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []).map(String);
@@ -12,11 +15,25 @@ let results = readRecipes({getItem: key => sessionStorage.getItem(key)}, 'recipe
 let currentPage = '';
 let loading = false;
 let guideLoaded = false;
+const pantrySelections = new Map();
+const pantryKey = text => text.trim().toLowerCase().replace(/\s+/g,' ');
+function pantryChip(text) {
+  return `<button type="button" data-pantry="${escapeHtml(text)}" aria-pressed="${pantrySelections.has(pantryKey(text))}">${escapeHtml(text)}</button>`;
+}
+function updatePantrySelection() {
+  document.querySelectorAll('[data-pantry]').forEach(button=>button.setAttribute('aria-pressed',String(pantrySelections.has(pantryKey(button.dataset.pantry)))));
+  $('pantrySelectionStatus').textContent=pantrySelections.size ? `${pantrySelections.size} selected · Added when you close` : 'Select ingredients, then close to add them.';
+}
 let toastTimer;
 let originPage = '#/';
 const stepPositions = new Map();
 let activeRecipe;
-const cookingSteps = recipe => recipe.directions.flatMap(text => text.replace(/([.!?])\s*(?=[A-Z])/g, '$1\n').split('\n')).map(text=>text.trim()).filter(Boolean);
+const servingChoices = new Map();
+function portioned(recipe) {
+  const choice=servingChoices.get(recipe.key);
+  return choice ? scaleRecipe(recipe,choice.people,choice.base) : scaleRecipe(recipe,Math.min(recipeServings(recipe),7),recipeServings(recipe));
+}
+const cookingSteps = recipe => portioned(recipe).directions.flatMap(text => text.replace(/([.!?])\s*(?=[A-Z])/g, '$1\n').split('\n')).map(text=>text.trim()).filter(Boolean);
 const isLiked = recipe => likes.some(item => signature(item) === signature(recipe));
 const findRecipe = key => likes.find(r => r.key === key) || recent.find(r => r.key === key) || recommendations.find(r => r.key === key);
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
@@ -63,10 +80,27 @@ function showRecipe(recipe) {
     $('recipePage').innerHTML = '<div class="empty-state"><h1>Recipe not found.</h1><p>This dish is no longer available on this device.</p><a class="primary-button" href="#/">Explore recipes</a></div>';
     return;
   }
+  const original=recipe;
+  recipe=portioned(original);
   $('recipePage').innerHTML = `<div class="page-heading"><a class="back-link" href="${originPage}">${icon('arrow')}${originPage === '#/liked' ? 'Liked dishes' : 'All dishes'}</a><p class="card-label">${escapeHtml(recipe.cuisine || 'Recipe')}</p><h1 class="detail-title">${escapeHtml(recipe.title)}</h1></div>
     <div class="detail-toolbar"><div class="detail-meta">${[duration(recipe),recipe.servings ? `${recipe.servings} servings` : '',recipe.diet].filter(Boolean).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div>${likeButton(recipe,true)}</div>
     <div class="recipe-content"><section><h2>Ingredients</h2><ul class="ingredients">${recipe.ingredients.map(text=>`<li>${escapeHtml(text)}</li>`).join('')}</ul></section><section class="cooking-section"><h2>Let’s cook</h2><div class="step-card"><div id="stepContent" aria-live="polite" aria-atomic="true"></div><div class="step-controls"><button type="button" class="like-button" id="previousStep">Previous</button><button type="button" class="primary-button" id="nextStep">Next step</button></div></div></section></div>`;
   $('previousStep').addEventListener('click',()=>moveStep(-1));
+  const choice=servingChoices.get(original.key);
+  const base=choice?.base || recipeServings(original);
+  const controls=document.createElement('div');
+  controls.className='portion-controls';
+  controls.innerHTML=`<label>Cooking for <select id="peopleCount" ${base?'':'disabled title="Serving information is unavailable for this recipe"'}>${Array.from({length:7},(_,i)=>`<option value="${i+1}" ${i+1===(choice?.people||Math.min(base,7))?'selected':''}>${i+1}</option>`).join('')}</select></label>`;
+  const ingredientHeading=document.querySelector('.recipe-content h2');
+  const ingredientHeader=document.createElement('div');
+  ingredientHeader.className='ingredients-header';
+  ingredientHeading.before(ingredientHeader);
+  ingredientHeader.append(ingredientHeading,controls);
+  $('peopleCount').addEventListener('change',()=>{
+    servingChoices.set(original.key,{base,people:Number($('peopleCount').value)});
+    showRecipe(original);
+    $('peopleCount').focus();
+  });
   $('nextStep').addEventListener('click',()=>moveStep(1));
   const speaker = document.createElement('button');
   speaker.id = 'readStep';
@@ -134,18 +168,31 @@ async function requestRecipes(generated) {
   $('recipeForm').setAttribute('aria-busy','true');
   $('requestStatus').textContent = generated ? 'Finding your next favourite…' : 'Searching the collection…';
   try {
-    const response = await fetch(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
+    const scanned=$('photoPreview').hidden===false;
+    let response = await requestApi(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
       ...(generated ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})} : {}),
-      signal: AbortSignal.timeout(60000)
-    });
+    }, () => {$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
     const data = await response.json().catch(()=>({}));
-    if (!response.ok || data.error) throw new Error(response.status===404 ? 'Recipe generation is unavailable. The backend needs to be updated.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
-    results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:generated?'generated':'collection'}));
+    if (!response.ok || data.error) throw new Error(response.status===404 ? 'This recipe API address was not found (404). Check the deployed API route.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
+    if(scanned){
+      response=await requestApi(`${API_BASE}/api/scan-recipes?q=${encodeURIComponent(query)}`);
+      const scanData=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(scanData.detail||'Couldn’t search recipes for these ingredients.');
+      if(scanData.recipes?.length){data.recipes=scanData.recipes;data.message=`Found recipes with at least ${Math.min(2,query.split(/[+,]/).filter(Boolean).length)} of your ingredients.`;}
+      else {
+        response=await requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})});
+        const generatedData=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(generatedData.detail||'No collection recipes matched and a recipe could not be generated for these ingredients.');
+        Object.assign(data,generatedData);
+        data.message='No close collection match found. Here’s a recipe made with your ingredients.';
+      }
+    }
+    results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:dish.is_generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
     recent = [...results,...recent.filter(r=>!keys.has(r.key))].slice(0,100);
     try { sessionStorage.setItem(RECENT_KEY, JSON.stringify(recent)); sessionStorage.setItem('recipe-room:results:v1', JSON.stringify(results)); } catch { /* Still usable in this session; liked recipes persist separately. */ }
     renderCollections();
-    $('requestStatus').textContent = results.length ? '' : 'No dishes found. Try another combination.';
+    $('requestStatus').textContent = data.message || (results.length ? '' : 'No dishes found. Try another combination.');
   } catch (error) {
     $('requestStatus').textContent = !navigator.onLine ? 'You’re offline. Your liked dishes are still available.' : error.name==='TimeoutError' ? 'The kitchen is taking longer than usual. Try again shortly.' : error.message;
   } finally {
@@ -154,25 +201,55 @@ async function requestRecipes(generated) {
     $('recipeForm').removeAttribute('aria-busy');
   }
 }
+function setDetectedIngredients(names) {
+  const box=$('detectedIngredients');
+  box.innerHTML=names.map((name,index)=>`<button type="button" class="ingredient-pill" data-remove-ingredient="${index}" aria-label="Remove ${escapeHtml(name)}">${escapeHtml(name)} <span aria-hidden="true">×</span></button>`).join('');
+  box.hidden=!names.length;
+  $('query').value=names.join(' + ');
+}
+async function scanPhoto(file) {
+  if(!file)return;
+  if(file.size>8*1024*1024){$('requestStatus').textContent='Choose an image smaller than 8 MB.';return;}
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    currentPhotoData=String(reader.result||'');
+    $('photoImage').src=currentPhotoData;$('photoPreview').hidden=false;
+    $('requestStatus').textContent='Scanning your ingredients…';
+    $('generateButton').disabled=true;
+    try{
+      const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:currentPhotoData})});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.detail||'Couldn’t identify ingredients in this photo.');
+      setDetectedIngredients(strings(data.ingredients));
+      $('requestStatus').textContent=data.ingredients?.length?'Review the ingredients, remove anything that looks wrong, then find recipes.':'No pantry ingredients were clear in this photo. Try another angle or type them below.';
+    }catch(error){$('requestStatus').textContent=error.message;}
+    finally{$('generateButton').disabled=false;}
+  };
+  reader.readAsDataURL(file);
+}
 async function loadGuide() {
   if (guideLoaded) return;
   $('guideContent').textContent = 'Loading pantry…';
   $('retryGuide').hidden = true;
   try {
-    const response = await fetch(`${API_BASE}/api/ingredients`, {signal:AbortSignal.timeout(30000)});
+    const response = await requestApi(`${API_BASE}/api/ingredients`, {}, () => {$('guideContent').textContent='The recipe server is waking up. Retrying…';});
     const data = await response.json();
     if (!response.ok || !Array.isArray(data.ingredients) || !Array.isArray(data.cuisines)) throw new Error();
-    $('guideContent').innerHTML = [['Main ingredients',data.ingredients],['Extras',data.additional_ingredients || []],['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(text=>`<span>${escapeHtml(text)}</span>`).join('')}</div></section>`).join('');
+    const ingredients = [...new Set([...strings(data.collection_ingredients),...strings(data.ingredients),...strings(data.additional_ingredients)])].sort((a,b)=>a.localeCompare(b));
+    $('guideContent').innerHTML = [...(Array.isArray(data.pantry_groups) ? data.pantry_groups.map(group=>[group.name,group.ingredients]) : [['Ingredients and condiments',ingredients]]),['Cuisines',data.cuisines]].map(([title,items])=>`<section class="guide-group"><h3>${title}</h3><div class="guide-tags">${strings(items).map(pantryChip).join('')}</div></section>`).join('');
     guideLoaded = true;
   } catch {
-    $('guideContent').textContent = 'The pantry guide is unavailable. Reconnect or check that the backend is up to date.';
+    $('guideContent').textContent = 'The recipe server did not respond. It may still be starting. Please try again shortly.';
     $('retryGuide').hidden = false;
   }
 }
 $('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(true);});
 $('searchButton').addEventListener('click',()=>requestRecipes(false));
+$('ingredientPhoto').addEventListener('change',event=>scanPhoto(event.target.files?.[0]));
+$('changePhoto').addEventListener('click',()=>$('ingredientPhoto').click());
+$('detectedIngredients').addEventListener('click',event=>{const button=event.target.closest('[data-remove-ingredient]');if(!button)return;const names=strings($('query').value.split('+').map(item=>item.trim()).filter(Boolean));names.splice(Number(button.dataset.removeIngredient),1);setDetectedIngredients(names);});
+$('query').addEventListener('input',()=>{if($('detectedIngredients').hidden)return;setDetectedIngredients($('query').value.split(/[+,\n]/).map(item=>item.trim()).filter(Boolean));});
 $('query').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('recipeForm').requestSubmit();}});
-document.querySelectorAll('[data-query]').forEach(button=>button.addEventListener('click',()=>{$('query').value=button.dataset.query;requestRecipes(true);}));
 document.addEventListener('click',event=>{
   const button = event.target.closest('[data-like]');
   if (!button) return;
@@ -190,7 +267,27 @@ document.addEventListener('click',event=>{
     announce(saved.liked ? 'Saved to Liked.' : 'Removed from Liked.');
   } catch { announce('Couldn’t save this dish. Device storage may be full or disabled.'); }
 });
-$('guideButton').addEventListener('click',()=>{$('guide').showModal();loadGuide();});
+$('guideButton').addEventListener('click',()=>{pantrySelections.clear();updatePantrySelection();$('guide').showModal();loadGuide();});
+$('guideContent').addEventListener('click',event=>{
+  const button=event.target.closest('[data-pantry]');
+  if(!button)return;
+  const name=button.dataset.pantry,key=pantryKey(name);
+  if(pantrySelections.has(key))pantrySelections.delete(key);
+  else pantrySelections.set(key,name);
+  updatePantrySelection();
+});
+$('guide').addEventListener('close',()=>{
+  if(!pantrySelections.size)return;
+  let query=$('query').value.trim();
+  for(const [key,name] of pantrySelections){
+    const existing=pantryKey(query).replace(/_/g,' ');
+    const escaped=key.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    if(!new RegExp(`(^|[\\s+,])${escaped}($|[\\s+,])`,'i').test(existing))query += (query?' + ':'')+name;
+  }
+  $('query').value=query;
+  pantrySelections.clear();
+  if(currentPage!=='home')location.hash='#/';
+});
 $('closeGuide').addEventListener('click',()=>$('guide').close());
 $('retryGuide').addEventListener('click',loadGuide);
 $('guide').addEventListener('click',event=>{if(event.target===$('guide')){const r=$('guide').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)$('guide').close();}});
@@ -215,4 +312,3 @@ updateInstall();
 renderCollections();
 route();
 if(!window.RECIPE_NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
-

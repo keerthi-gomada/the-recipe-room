@@ -80,6 +80,51 @@ class GenerationRequest(BaseModel):
     main_ingredient: str | None = Field(default=None, min_length=1, max_length=500)
     cuisine: str | None = Field(default=None, min_length=1, max_length=120)
 
+class ScanRequest(BaseModel):
+    image: str = Field(min_length=1, max_length=12_000_000)
+
+def canonical_pantry_names():
+    names=set(collection_ingredients)
+    for group in pantry_groups([*collection_ingredients,*METHODS,*EXTRAS]):
+        names.update(group['ingredients'])
+    return sorted(names)
+
+@app.post('/api/scan')
+def scan_ingredients(request: ScanRequest):
+    """Identify visible pantry ingredients using a configured vision endpoint."""
+    import os
+    import base64
+    import urllib.request
+    from urllib.error import URLError, HTTPError
+    endpoint=os.getenv('OPENAI_BASE_URL','https://api.openai.com/v1').rstrip('/')+'/chat/completions'
+    api_key=os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        raise HTTPException(status_code=503,detail='Photo scanning is not configured on the recipe server yet.')
+    if not request.image.startswith('data:image/') or ',' not in request.image:
+        raise HTTPException(status_code=422,detail='Upload a valid image to scan.')
+    mime,encoded=request.image.split(',',1)
+    media_type=mime.removeprefix('data:').removesuffix(';base64')
+    try:
+        base64.b64decode(encoded,validate=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422,detail='The selected image could not be read.') from exc
+    allowed=canonical_pantry_names()
+    payload={'model':os.getenv('VISION_MODEL','gpt-4o-mini'),'temperature':0,
+      'response_format':{'type':'json_object'},
+      'messages':[{'role':'system','content':'Identify only ingredients clearly visible in the image. Return JSON {"ingredients":[...]} with names selected only from the provided pantry catalog. Do not infer hidden items, packaging brands, or cookware.'},
+        {'role':'user','content':[{'type':'text','text':'Match visible ingredients to this catalog. Return at most 30 distinct names: '+', '.join(allowed)},
+         {'type':'image_url','image_url':{'url':request.image,'detail':'high'}}]}]}
+    req=urllib.request.Request(endpoint,data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+api_key,'Content-Type':'application/json'},method='POST')
+    try:
+        with urllib.request.urlopen(req,timeout=50) as response: result=json.loads(response.read())
+        content=result['choices'][0]['message']['content']
+        found=json.loads(content).get('ingredients',[])
+    except (HTTPError,URLError,TimeoutError,KeyError,IndexError,ValueError) as exc:
+        raise HTTPException(status_code=502,detail='Ingredient recognition failed. Try another photo.') from exc
+    allowed_lookup={name.casefold():name for name in allowed}
+    cleaned=list(dict.fromkeys(allowed_lookup[str(name).casefold()] for name in found if str(name).casefold() in allowed_lookup))
+    return {'ingredients':cleaned}
+
 @app.get("/api/ingredients")
 def supported_ingredients():
     return {"ingredients": [key.replace('_', ' ') for key in METHODS],
@@ -188,6 +233,37 @@ def search(
         "count": len(results),
         "recipes": results
     }
+
+@app.get('/api/scan-recipes')
+def scan_recipes(q: str = Query(..., min_length=1, max_length=500)):
+    """Return collection recipes containing at least two recognized query ingredients."""
+    if not recipe_index:
+        raise HTTPException(status_code=503,detail='Recipe search is unavailable.')
+    try:
+        canonical_tokens,_=parse_query(q)
+    except (ValueError,DuplicateIngredientError):
+        canonical_tokens=engine.extract_canonical_ingredients(q)
+    canonical_tokens=[token for token in canonical_tokens if token in METHODS or token in EXTRAS]
+    if not canonical_tokens:
+        return {'recipes':[],'matched_ingredients':[]}
+    query_vec=engine.encode_ingredient_list(canonical_tokens).reshape(1,-1)
+    faiss.normalize_L2(query_vec)
+    _,indices=recipe_index.search(query_vec,min(100,recipe_index.ntotal))
+    candidates=collection_search.rank(q,STYLES,indices[0],min(100,recipe_index.ntotal))
+    results=[]
+    for idx in candidates:
+        if idx<0 or idx>=len(recipe_metadata):continue
+        item=recipe_metadata[idx]
+        ingredient_text=' '.join(item.get('ingredients',[]))
+        present=set(engine.extract_canonical_ingredients(ingredient_text))
+        overlap=[name for name in canonical_tokens if name in present]
+        if len(overlap)<min(2,len(canonical_tokens)):continue
+        results.append({'id':int(idx),'title':item.get('title','Untitled recipe'),'is_generated':False,
+          'ingredients':item.get('ingredients',[]),'directions':item.get('directions',[]),'cuisine':item.get('cuisine','Indian'),
+          'prep_time':item.get('prep_time',30),'servings':item.get('servings'),'diet':item.get('diet','Vegetarian'),
+          'matched_ingredients':[name.replace('_',' ') for name in overlap]})
+        if len(results)>=24:break
+    return {'recipes':results,'matched_ingredients':[name.replace('_',' ') for name in canonical_tokens]}
 
 app.mount("/", StaticFiles(directory=str(BASE_DIR.parent / "frontend"), html=True), name="frontend")
 

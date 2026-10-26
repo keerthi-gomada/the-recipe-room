@@ -168,11 +168,25 @@ async function requestRecipes(generated) {
   $('recipeForm').setAttribute('aria-busy','true');
   $('requestStatus').textContent = generated ? 'Finding your next favourite…' : 'Searching the collection…';
   try {
-    const response = await requestApi(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
+    const scanned=$('photoPreview').hidden===false;
+    let response = await requestApi(generated ? `${API_BASE}/api/generate` : `${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`, {
       ...(generated ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})} : {}),
     }, () => {$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
     const data = await response.json().catch(()=>({}));
     if (!response.ok || data.error) throw new Error(response.status===404 ? 'This recipe API address was not found (404). Check the deployed API route.' : typeof data.detail==='string' ? data.detail : data.error || 'Couldn’t load recipes. Please try again.');
+    if(scanned){
+      response=await requestApi(`${API_BASE}/api/scan-recipes?q=${encodeURIComponent(query)}`);
+      const scanData=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(scanData.detail||'Couldn’t search recipes for these ingredients.');
+      if(scanData.recipes?.length){data.recipes=scanData.recipes;data.message=`Found recipes with at least ${Math.min(2,query.split(/[+,]/).filter(Boolean).length)} of your ingredients.`;}
+      else {
+        response=await requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})});
+        const generatedData=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(generatedData.detail||'No collection recipes matched and a recipe could not be generated for these ingredients.');
+        Object.assign(data,generatedData);
+        data.message='No close collection match found. Here’s a recipe made with your ingredients.';
+      }
+    }
     results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:dish.is_generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
     recent = [...results,...recent.filter(r=>!keys.has(r.key))].slice(0,100);
@@ -186,6 +200,32 @@ async function requestRecipes(generated) {
     $('generateButton').disabled = $('searchButton').disabled = false;
     $('recipeForm').removeAttribute('aria-busy');
   }
+}
+function setDetectedIngredients(names) {
+  const box=$('detectedIngredients');
+  box.innerHTML=names.map((name,index)=>`<button type="button" class="ingredient-pill" data-remove-ingredient="${index}" aria-label="Remove ${escapeHtml(name)}">${escapeHtml(name)} <span aria-hidden="true">×</span></button>`).join('');
+  box.hidden=!names.length;
+  $('query').value=names.join(' + ');
+}
+async function scanPhoto(file) {
+  if(!file)return;
+  if(file.size>8*1024*1024){$('requestStatus').textContent='Choose an image smaller than 8 MB.';return;}
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    currentPhotoData=String(reader.result||'');
+    $('photoImage').src=currentPhotoData;$('photoPreview').hidden=false;
+    $('requestStatus').textContent='Scanning your ingredients…';
+    $('generateButton').disabled=true;
+    try{
+      const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:currentPhotoData})});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.detail||'Couldn’t identify ingredients in this photo.');
+      setDetectedIngredients(strings(data.ingredients));
+      $('requestStatus').textContent=data.ingredients?.length?'Review the ingredients, remove anything that looks wrong, then find recipes.':'No pantry ingredients were clear in this photo. Try another angle or type them below.';
+    }catch(error){$('requestStatus').textContent=error.message;}
+    finally{$('generateButton').disabled=false;}
+  };
+  reader.readAsDataURL(file);
 }
 async function loadGuide() {
   if (guideLoaded) return;
@@ -205,8 +245,11 @@ async function loadGuide() {
 }
 $('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(true);});
 $('searchButton').addEventListener('click',()=>requestRecipes(false));
+$('ingredientPhoto').addEventListener('change',event=>scanPhoto(event.target.files?.[0]));
+$('changePhoto').addEventListener('click',()=>$('ingredientPhoto').click());
+$('detectedIngredients').addEventListener('click',event=>{const button=event.target.closest('[data-remove-ingredient]');if(!button)return;const names=strings($('query').value.split('+').map(item=>item.trim()).filter(Boolean));names.splice(Number(button.dataset.removeIngredient),1);setDetectedIngredients(names);});
+$('query').addEventListener('input',()=>{if($('detectedIngredients').hidden)return;setDetectedIngredients($('query').value.split(/[+,\n]/).map(item=>item.trim()).filter(Boolean));});
 $('query').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('recipeForm').requestSubmit();}});
-document.querySelectorAll('[data-query]').forEach(button=>button.addEventListener('click',()=>{$('query').value=button.dataset.query;requestRecipes(true);}));
 document.addEventListener('click',event=>{
   const button = event.target.closest('[data-like]');
   if (!button) return;

@@ -26,7 +26,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="app-shell">
     <header class="site-header">
-      <a class="brand" href="#/" aria-label="The Recipe Room, home"><span class="brand-mark" aria-hidden="true">r.</span><span>The Recipe Room</span></a>
+      <a class="brand" href="#/" aria-label="The Recipe Room, home"><img class="brand-mark" src="./icon-192.png" alt="" aria-hidden="true" width="34" height="34"><span>The Recipe Room</span></a>
       <nav aria-label="Main navigation">
         <a id="likedNav" class="nav-link" href="#/liked"><svg class="icon"><use href="#heart"/></svg><span>Liked</span><span id="likedCount" class="count" hidden>0</span></a>
         <button id="guideButton" class="icon-button" type="button" aria-label="Supported ingredients and cuisines" title="Supported ingredients and cuisines"><svg class="icon"><use href="#info"/></svg></button>
@@ -34,18 +34,18 @@
     </header>
     <main id="main" tabindex="-1">
       <section id="homePage">
-        <div class="hero"><h1>What’s cooking?</h1></div>
+        <div class="hero"><p class="eyebrow">THE RECIPE ROOM</p><h1>Scan your ingredients.<br>Find your next meal.</h1></div>
         <form id="recipeForm" class="query-panel">
-          <label for="query">Ingredients + cuisine</label>
-          <textarea id="query" rows="2" maxlength="500" placeholder="paneer + spinach + north indian" enterkeyhint="go" autocapitalize="none" spellcheck="false" required></textarea>
-          <div class="query-actions"><button id="searchButton" type="button" class="text-button">Search collection</button><button id="generateButton" type="submit" class="primary-button">Generate <span aria-hidden="true">↗</span></button></div>
+          <label class="scanner" for="ingredientPhoto"><span class="scanner-frame" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M7 18V9a2 2 0 0 1 2-2h9M30 7h9a2 2 0 0 1 2 2v9M41 30v9a2 2 0 0 1-2 2h-9M18 41H9a2 2 0 0 1-2-2v-9"/><path d="M15 26h18M24 17v18"/></svg></span><strong>Take a photo of your ingredients</strong><span>We’ll identify what’s in the frame and find recipes</span><input id="ingredientPhoto" type="file" accept="image/*" capture="environment"></label>
+          <div id="photoPreview" class="photo-preview" hidden><img id="photoImage" alt="Selected ingredients"><button id="changePhoto" type="button" class="text-button">Choose another photo</button></div>
+          <label for="query" class="manual-label">Or type ingredients</label>
+          <textarea id="query" rows="1" maxlength="500" placeholder="e.g. paneer, spinach, tomato" enterkeyhint="go" autocapitalize="none" spellcheck="false"></textarea>
+          <div id="detectedIngredients" class="detected-ingredients" hidden></div>
+          <div class="query-actions"><button id="searchButton" type="button" class="text-button">Search recipes</button><button id="generateButton" type="submit" class="primary-button">Find recipes <span aria-hidden="true">↗</span></button></div>
         </form>
-        <div class="examples" aria-label="Try an example"><span>Try</span><button type="button" data-query="paneer + spinach + north indian">Paneer & spinach</button><button type="button" data-query="rice + potato + south indian">Rice & potato</button><button type="button" data-query="tofu + mushroom + thai">Tofu & mushroom</button></div>
         <p id="requestStatus" class="status" role="status" aria-live="polite"></p>
         <div id="resultsHeading" class="section-heading" hidden><h2>Recipes</h2><span id="resultsCount"></span></div>
         <div id="resultsGrid" class="recipe-grid"></div>
-        <div class="section-heading"><h2>A few favourites</h2><span>From the collection</span></div>
-        <div id="recommendationsGrid" class="recipe-grid recommendations-grid"></div>
       </section>
       <section id="likedPage" hidden aria-labelledby="likedHeading">
         <div class="page-heading"><a class="back-link" href="#/"><svg class="icon"><use href="#arrow"/></svg>Explore</a><h1 id="likedHeading">Liked dishes</h1><p>Liked recipes, saved on this device.</p></div>
@@ -58,8 +58,8 @@
   </div>
   <dialog id="guide" aria-labelledby="guideTitle">
     <div class="dialog-heading"><h2 id="guideTitle">Your pantry guide</h2><button id="closeGuide" class="icon-button" aria-label="Close guide"><svg class="icon"><use href="#close"/></svg></button></div>
-    <p>Join ingredients and cuisines with <strong>+</strong>. Up to 8 ingredients and 3 cuisines; one dish per cuisine. Default: Indian.</p>
-    <p class="guide-example">paneer + spinach + north indian</p>
+    <p>Separate ingredients and cuisines with spaces or <strong>+</strong>. Up to 8 ingredients and 3 cuisines; one dish per cuisine. Default: Indian.</p>
+    <p id="pantrySelectionStatus" class="guide-example" role="status">Select ingredients, then close to add them.</p>
     <div id="guideContent" aria-live="polite"></div>
     <button id="retryGuide" class="text-button" hidden>Try again</button>
   </dialog>
