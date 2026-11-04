@@ -12,6 +12,7 @@ const strings = value => (Array.isArray(value) ? value : typeof value === 'strin
 let likes = readRecipes({getItem: key => localStorage.getItem(key)}, LIKED_KEY);
 let recent = readRecipes({getItem: key => sessionStorage.getItem(key)}, RECENT_KEY);
 let results = readRecipes({getItem: key => sessionStorage.getItem(key)}, 'recipe-room:results:v1');
+let hasSearched = false;
 let currentPage = '';
 let loading = false;
 let guideLoaded = false;
@@ -69,10 +70,12 @@ function card(recipe) {
   return `<article class="recipe-card${recipe.source==='generated'?' generated-card':''}"><a class="card-link" href="#/recipe/${encodeURIComponent(recipe.key)}"><p class="card-label">${recipe.source==='generated'?'Generated · ':''}${escapeHtml(recipe.cuisine || 'Recipe')}</p><h3>${escapeHtml(recipe.title)}</h3><p class="card-meta">${escapeHtml(meta)} <span aria-hidden="true">↗</span></p></a>${likeButton(recipe)}</article>`;
 }
 function renderCollections() {
-  $('resultsGrid').innerHTML = results.map(card).join('');
+  const homeRecipes = hasSearched ? results : recommendations.slice(0,6);
+  $('resultsGrid').innerHTML = homeRecipes.map(card).join('');
   if($('scanResultsGrid')) $('scanResultsGrid').innerHTML=results.map(card).join('');
-  $('resultsHeading').hidden = !results.length;
-  $('resultsCount').textContent = `${results.length} ${results.length === 1 ? 'dish' : 'dishes'}`;
+  $('resultsHeading').hidden = !homeRecipes.length;
+  $('resultsHeading').querySelector('h2').textContent = hasSearched ? 'Recipes' : 'Recommended dishes';
+  $('resultsCount').textContent = `${homeRecipes.length} ${homeRecipes.length === 1 ? 'dish' : 'dishes'}`;
   $('likedGrid').innerHTML = likes.map(card).join('');
   $('likedEmpty').hidden = likes.length > 0;
   $('likedCount').textContent = likes.length;
@@ -177,10 +180,11 @@ async function requestRecipes(generated) {
   $('generateButton').disabled = $('searchButton').disabled = true;
   $('recipeForm').setAttribute('aria-busy','true');
   $('requestStatus').textContent = generated ? 'Finding your next favourite…' : 'Searching the collection…';
+  let fallbackUsed=false;
   try {
     const scanned=scanMode==='camera';
     const ingredientCount=query.split('+').map(item=>item.trim()).filter(Boolean).length;
-    const postGenerate=()=>requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})},()=>{$('scanProgressText').textContent='The recipe kitchen is waking up…';});
+    const postGenerate=()=>requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})},()=>{$('scanProgressText').textContent='The recipe kitchen is waking up…';$('requestStatus').textContent='The recipe kitchen is waking up. Retrying…';});
     let response,data;
     if(scanned&&ingredientCount<=3){
       $('scanProgressTitle').textContent='Creating your recipe';$('scanProgressText').textContent='Three or fewer ingredients found · Epicure is composing a dish…';
@@ -194,18 +198,26 @@ async function requestRecipes(generated) {
       if(data.recipes?.length)data.message=`Found recipes that use at least two of your ingredients.`;
       else{ $('scanProgressTitle').textContent='Creating your recipe';$('scanProgressText').textContent='No close collection match. Epicure is composing a dish…';response=await postGenerate();const generatedData=await response.json().catch(()=>({}));if(!response.ok)throw new Error(generatedData.detail||'No matching recipe found and generation failed.');data=generatedData;data.message='No close collection match found. Epicure created a recipe using your ingredients.';}
     }else{
-      response=await requestApi(generated?`${API_BASE}/api/generate`:`${API_BASE}/api/search?q=${encodeURIComponent(query)}&include_generated=false`,{...(generated?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})}:{})},()=>{$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
+      response=generated?await postGenerate():await requestApi(`${API_BASE}/api/scan-recipes?q=${encodeURIComponent(query)}`,{},()=>{$('requestStatus').textContent='The recipe server is waking up. Retrying…';});
       data=await response.json().catch(()=>({}));if(!response.ok||data.error)throw new Error(response.status===404?'Recipe API address was not found (404).':typeof data.detail==='string'?data.detail:data.error||'Couldn’t load recipes.');
+      if(!generated&&!data.recipes?.length){
+        fallbackUsed=true;
+        $('requestStatus').textContent='No collection recipes found for those ingredients and cuisine. Creating a recipe with your ingredients now…';
+        response=await postGenerate();data=await response.json().catch(()=>({}));
+        if(!response.ok||data.error)throw new Error(typeof data.detail==='string'?data.detail:data.error||'Recipe creation failed.');
+        data.message='No collection recipes matched your ingredients and cuisine. This recipe was created for you; check the ingredients and instructions before cooking.';
+      }
     }
     results = (Array.isArray(data.recipes) ? data.recipes : []).map(dish=>({...normalizeRecipe(dish),source:dish.is_generated?'generated':'collection'}));
     const keys = new Set(results.map(r=>r.key));
     recent = [...results,...recent.filter(r=>!keys.has(r.key))].slice(0,100);
     try { sessionStorage.setItem(RECENT_KEY, JSON.stringify(recent)); sessionStorage.setItem('recipe-room:results:v1', JSON.stringify(results)); } catch { /* Still usable in this session; liked recipes persist separately. */ }
+    hasSearched=true;
     renderCollections();
     $('requestStatus').textContent = data.message || (results.length ? '' : 'No dishes found. Try another combination.');
     if(scanned){$('scanProgress').hidden=true;location.hash='#/results';}
   } catch (error) {
-    $('requestStatus').textContent = !navigator.onLine ? 'You’re offline. Your liked dishes are still available.' : error.name==='TimeoutError' ? 'The kitchen is taking longer than usual. Try again shortly.' : error.message;
+    $('requestStatus').textContent = !navigator.onLine ? 'You’re offline. Your liked dishes are still available.' : `${fallbackUsed?'No collection recipes matched your ingredients and cuisine. Recipe creation also failed. ':''}${error.name==='TimeoutError'?'The kitchen is taking longer than usual. Try again shortly.':error.message}`;
   } finally {
     loading = false;
     $('generateButton').disabled = $('searchButton').disabled = false;
