@@ -341,13 +341,15 @@ async function loadGuide() {
     $('retryGuide').hidden = false;
   }
 }
-$('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(true);});
-$('searchButton').addEventListener('click',()=>requestRecipes(false));
+$('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(false);});
+$('searchButton').addEventListener('click',()=>requestRecipes(true));
+$('recipeForm').addEventListener('click',event=>{const example=event.target.closest('[data-example]');if(!example)return;$('query').value=example.dataset.example;$('query').focus();$('requestStatus').textContent='';});
+$('openPantry').addEventListener('click',()=>$('guideButton').click());
 $('startCamera').addEventListener('click',startLiveCamera);
 $('scanPhotoButton').addEventListener('click',()=>$('scanPhotoInput').click());
 $('scanPhotoInput').addEventListener('change',event=>scanPhoto(event.target.files?.[0]));
 $('stopCamera').addEventListener('click',()=>{scanMode='';stopLiveCamera();$('scanProgress').hidden=true;});
-function scanAgain(){location.hash='#/';setDetectedIngredients([]);$('requestStatus').textContent='';$('scanProgress').hidden=true;startLiveCamera();}
+function scanAgain(){location.hash='#/';$('requestStatus').textContent='';$('query').focus();}
 $('backToScanner').addEventListener('click',scanAgain);
 $('scanAgainButton').addEventListener('click',scanAgain);
 $('detectedIngredients').addEventListener('click',event=>{const button=event.target.closest('[data-remove-ingredient]');if(!button)return;const names=strings($('query').value.split('+').map(item=>item.trim()).filter(Boolean));names.splice(Number(button.dataset.removeIngredient),1);setDetectedIngredients(names);});
