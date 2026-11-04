@@ -1,5 +1,5 @@
 from collection_search import CollectionSearch, ingredient_catalog
-from pantry import pantry_groups
+from pantry import pantry_groups, clean_name, ALIASES as PANTRY_ALIASES
 import csv
 import json
 import re
@@ -84,10 +84,31 @@ class ScanRequest(BaseModel):
     image: str = Field(min_length=1, max_length=12_000_000)
 
 def canonical_pantry_names():
-    names=set(collection_ingredients)
+    # Give the vision model the guide's concise canonical names. The raw recipe
+    # catalog contains thousands of quantity/preparation variants that drown
+    # out common produce such as tomato, spinach and carrot in the prompt.
+    names=set()
     for group in pantry_groups([*collection_ingredients,*METHODS,*EXTRAS]):
         names.update(group['ingredients'])
-    return sorted(names)
+    names.update(key.replace('_',' ') for key in [*METHODS,*EXTRAS])
+    return sorted(names,key=lambda name:(name not in {'potato','tomato','onion','carrot','spinach','bell pepper','cucumber','eggplant','cauliflower','broccoli','capsicum','okra','zucchini','cabbage','peas','mushroom','green bean'},name))
+
+def normalize_scan_name(value, allowed_lookup):
+    raw=str(value).casefold().strip()
+    cleaned=clean_name(raw).strip()
+    candidates=[raw,cleaned,cleaned.replace(' leaf','').replace(' leaves','')]
+    for name in candidates:
+        name=' '.join(name.replace('_',' ').split())
+        alias=PANTRY_ALIASES.get(name,name)
+        if alias in allowed_lookup:return allowed_lookup[alias]
+        if name in allowed_lookup:return allowed_lookup[name]
+    # Ingredient labels often contain a cultivar or preparation note. Match
+    # the longest complete pantry name within that label ("ripe tomato" etc).
+    words=set(cleaned.split())
+    for name in sorted(allowed_lookup,key=len,reverse=True):
+        if name in cleaned or set(name.split())<=words:
+            return allowed_lookup[name]
+    return None
 
 @app.post('/api/scan')
 def scan_ingredients(request: ScanRequest):
@@ -111,8 +132,8 @@ def scan_ingredients(request: ScanRequest):
     allowed=canonical_pantry_names()
     payload={'model':os.getenv('VISION_MODEL','gpt-4o-mini'),'temperature':0,
       'response_format':{'type':'json_object'},
-      'messages':[{'role':'system','content':'Identify only ingredients clearly visible in the image. Return JSON {"ingredients":[...]} with names selected only from the provided pantry catalog. Do not infer hidden items, packaging brands, or cookware.'},
-        {'role':'user','content':[{'type':'text','text':'Match visible ingredients to this catalog. Return at most 30 distinct names: '+', '.join(allowed)},
+      'messages':[{'role':'system','content':'You are a careful produce and pantry scanner. Inspect the whole photo closely, especially fresh vegetables. Identify each distinct ingredient that is clearly visible, including vegetables and herbs. Use short, singular common ingredient names (for example: tomato, spinach, carrot, potato, onion, bell pepper, cucumber, eggplant, broccoli, cauliflower, zucchini, cabbage, mushroom, peas, green beans, okra, garlic, ginger). Include a detected ingredient even if its catalog label uses a longer phrase. Never guess hidden ingredients, cookware, packaging or brands. Return only JSON: {"ingredients":["tomato","spinach"]}. Return an empty array only when no food ingredient is visible.'},
+        {'role':'user','content':[{'type':'text','text':'Visible ingredient catalog for reference (use familiar concise names for produce): '+', '.join(allowed)},
          {'type':'image_url','image_url':{'url':request.image,'detail':'high'}}]}]}
     req=urllib.request.Request(endpoint,data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+api_key,'Content-Type':'application/json'},method='POST')
     try:
@@ -122,7 +143,14 @@ def scan_ingredients(request: ScanRequest):
     except (HTTPError,URLError,TimeoutError,KeyError,IndexError,ValueError) as exc:
         raise HTTPException(status_code=502,detail='Ingredient recognition failed. Try another photo.') from exc
     allowed_lookup={name.casefold():name for name in allowed}
-    cleaned=list(dict.fromkeys(allowed_lookup[str(name).casefold()] for name in found if str(name).casefold() in allowed_lookup))
+    cleaned=[]
+    seen=set()
+    for name in found:
+        canonical=normalize_scan_name(name,allowed_lookup)
+        if canonical and canonical.casefold() not in seen:
+            cleaned.append(canonical)
+            seen.add(canonical.casefold())
+    cleaned=cleaned[:30]
     return {'ingredients':cleaned}
 
 @app.get("/api/ingredients")

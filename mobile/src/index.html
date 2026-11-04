@@ -37,7 +37,7 @@
         <div class="hero"><p class="eyebrow">THE RECIPE ROOM</p><h1>Scan your ingredients.<br>Find your next meal.</h1></div>
         <form id="recipeForm" class="query-panel">
           <label class="scanner" for="ingredientPhoto"><span class="scanner-frame" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M7 18V9a2 2 0 0 1 2-2h9M30 7h9a2 2 0 0 1 2 2v9M41 30v9a2 2 0 0 1-2 2h-9M18 41H9a2 2 0 0 1-2-2v-9"/><path d="M15 26h18M24 17v18"/></svg></span><strong>Take a photo of your ingredients</strong><span>We’ll identify what’s in the frame and find recipes</span><input id="ingredientPhoto" type="file" accept="image/*" capture="environment"></label>
-          <div id="photoPreview" class="photo-preview" hidden><img id="photoImage" alt="Selected ingredients"><button id="changePhoto" type="button" class="text-button">Choose another photo</button></div>
+          <div id="photoPreview" class="photo-preview" hidden><div class="photo-scan-frame"><img id="photoImage" alt="Selected ingredients"><span class="photo-scan-line" aria-hidden="true"></span><span class="photo-scan-corners" aria-hidden="true"></span></div><button id="changePhoto" type="button" class="text-button">Choose another photo</button></div>
           <label for="query" class="manual-label">Or type ingredients</label>
           <textarea id="query" rows="1" maxlength="500" placeholder="e.g. paneer, spinach, tomato" enterkeyhint="go" autocapitalize="none" spellcheck="false"></textarea>
           <div id="detectedIngredients" class="detected-ingredients" hidden></div>

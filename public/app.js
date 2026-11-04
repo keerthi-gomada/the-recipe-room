@@ -219,16 +219,19 @@ async function scanPhoto(file) {
   reader.onload=async()=>{
     currentPhotoData=String(reader.result||'');
     $('photoImage').src=currentPhotoData;$('photoPreview').hidden=false;
-    $('requestStatus').textContent='Scanning your ingredients…';
+    $('photoPreview').classList.add('is-scanning');
+    $('scanProgress').hidden=false;$('scanProgressTitle').textContent='Scanning your ingredients';$('scanProgressText').textContent='Looking for vegetables and pantry items…';
+    $('requestStatus').textContent='';
     $('generateButton').disabled=true;
     try{
       const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:currentPhotoData})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.detail||'Couldn’t identify ingredients in this photo.');
       setDetectedIngredients(strings(data.ingredients));
-      if(data.ingredients?.length){$('scanProgress').hidden=false;$('scanProgressTitle').textContent='Ingredients identified';$('scanProgressText').textContent=`${data.ingredients.length} ingredient${data.ingredients.length===1?'':'s'} found. Preparing recipes…`;await requestRecipes(true);}
-      else $('requestStatus').textContent='No pantry ingredients were clear in this photo. Try another angle or type them below.';
-    }catch(error){$('requestStatus').textContent=error.message;}
+      $('photoPreview').classList.remove('is-scanning');
+      if(data.ingredients?.length){$('scanProgressTitle').textContent='Ingredients identified';$('scanProgressText').textContent=`${data.ingredients.join(' · ')} — finding recipes…`;await requestRecipes(true);}
+      else{$('scanProgress').hidden=true;$('requestStatus').textContent='No pantry ingredients were clear in this photo. Try another angle or type them below.';}
+    }catch(error){$('photoPreview').classList.remove('is-scanning');$('scanProgress').hidden=true;$('requestStatus').textContent=error.message;}
     finally{$('generateButton').disabled=false;}
   };
   reader.readAsDataURL(file);
