@@ -227,6 +227,7 @@ function stopLiveCamera(message='Camera is off') {
   const video=$('cameraFeed');
   if(video){video.pause();video.srcObject=null;video.hidden=true;}
   $('cameraStage').classList.remove('is-live');
+  $('cameraStage').classList.toggle('has-notice',message!=='Camera is off');
   $('cameraPrompt').hidden=false;
   $('cameraStatus').textContent=message;
   $('startCamera').hidden=false;$('startCamera').disabled=false;
@@ -261,8 +262,8 @@ async function scanLiveFrame() {
       return;
     }
     if(cameraAttempts>=MAX_CAMERA_SCANS){
-      scanMode='';stopLiveCamera('No clear ingredients found. Move closer and try again.');$('scanProgress').hidden=true;
-      $('requestStatus').textContent='I couldn’t identify ingredients yet. Move closer, improve the lighting, and start the scanner again.';
+      scanMode='';stopLiveCamera('No ingredients found. Type them below or scan again.');$('scanProgress').hidden=true;
+      $('requestStatus').textContent='No ingredients found. Type them in the field below or tap Start live scanner to try again.';
       return;
     }
     cameraScanTimer=setTimeout(scanLiveFrame,1900);
@@ -281,6 +282,7 @@ async function startLiveCamera() {
     const video=$('cameraFeed');video.srcObject=cameraStream;video.hidden=false;
     await video.play();
     $('cameraPrompt').hidden=true;$('cameraStage').classList.add('is-live');
+    $('cameraStage').classList.remove('has-notice');
     $('startCamera').hidden=true;$('stopCamera').hidden=false;
     cameraAttempts=0;cameraScanning=true;scanMode='camera';
     $('cameraStatus').textContent='Center the ingredients inside the frame';
