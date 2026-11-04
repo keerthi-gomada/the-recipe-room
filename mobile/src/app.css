@@ -20,3 +20,6 @@
 
 /* Ingredient photo scan overlay */
 .photo-scan-frame{position:relative;max-width:min(100%,560px);margin:auto;overflow:hidden;border-radius:14px;background:#171512}.photo-scan-frame img{display:block;max-height:340px;max-width:100%;margin:auto;object-fit:contain;transition:filter .25s}.photo-scan-frame:after{content:'';position:absolute;inset:10px;border:1px solid #ffffff55;border-radius:9px;pointer-events:none}.photo-scan-line{display:none;position:absolute;z-index:2;left:5%;right:5%;top:8%;height:3px;background:#c5f47a;box-shadow:0 0 10px 3px #c5f47a99;opacity:.95}.is-scanning .photo-scan-line{display:block;animation:photo-sweep 1.8s ease-in-out infinite alternate}.is-scanning .photo-scan-frame img{filter:saturate(1.12) brightness(.82)}@keyframes photo-sweep{from{top:8%}to{top:90%}}@media(prefers-reduced-motion:reduce){.is-scanning .photo-scan-line{animation:none;top:50%}}
+
+/* Use more of wide screens while keeping balanced gutters. */
+.app-shell{max-width:1280px}@media(min-width:1600px){.app-shell{max-width:1380px}}
