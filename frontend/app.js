@@ -343,7 +343,7 @@ async function loadGuide() {
 }
 $('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(false);});
 $('searchButton').addEventListener('click',()=>requestRecipes(true));
-$('recipeForm').addEventListener('click',event=>{const example=event.target.closest('[data-example]');if(!example)return;$('query').value=example.dataset.example;$('query').focus();$('requestStatus').textContent='';});
+$('homePage').addEventListener('click',event=>{const example=event.target.closest('[data-example]');if(!example)return;$('query').value=example.dataset.example;$('query').focus();$('requestStatus').textContent='';});
 $('openPantry').addEventListener('click',()=>$('guideButton').click());
 $('startCamera').addEventListener('click',startLiveCamera);
 $('scanPhotoButton').addEventListener('click',()=>$('scanPhotoInput').click());

@@ -47,12 +47,12 @@
           </div>
           <label for="query" class="manual-label">Your ingredients</label>
           <textarea id="query" rows="1" maxlength="500" placeholder="e.g. paneer + spinach + tomato" enterkeyhint="go" autocapitalize="none" spellcheck="false"></textarea>
-          <div class="examples"><span>Try a combination:</span><button type="button" data-example="potato + onion + tomato">Potato + onion + tomato</button><button type="button" data-example="paneer + spinach">Paneer + spinach</button><button type="button" data-example="rice + egg + carrot">Rice + egg + carrot</button></div>
-          <p class="pantry-note">Need ideas? <button id="openPantry" type="button">Browse the pantry guide</button> for supported ingredients.</p>
           <div id="detectedIngredients" class="detected-ingredients" hidden></div>
         <div id="scanProgress" class="scan-progress" hidden role="status" aria-live="polite"><span class="scan-orbit" aria-hidden="true"></span><strong id="scanProgressTitle">Scanning ingredients</strong><span id="scanProgressText">Looking closely at your photo…</span></div>
-          <div class="query-actions"><button id="searchButton" type="button" class="text-button">Create a recipe</button><button id="generateButton" type="submit" class="primary-button">Find recipes <span aria-hidden="true">↗</span></button></div>
+          <div class="query-actions"><button id="searchButton" type="button" class="create-button">Create a Recipe</button><button id="generateButton" type="submit" class="primary-button">Find recipes <span aria-hidden="true">↗</span></button></div>
         </form>
+        <div class="examples"><span>Try a combination:</span><button type="button" data-example="potato + onion + tomato">Potato + onion + tomato</button><button type="button" data-example="paneer + spinach">Paneer + spinach</button><button type="button" data-example="rice + egg + carrot">Rice + egg + carrot</button></div>
+        <p class="pantry-note">Need ideas? <button id="openPantry" type="button">Browse Pantry Guide</button>.</p>
         <p id="requestStatus" class="status" role="status" aria-live="polite"></p>
         <div id="resultsHeading" class="section-heading" hidden><h2>Recipes</h2><span id="resultsCount"></span></div>
         <div id="resultsGrid" class="recipe-grid"></div>
