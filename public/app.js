@@ -250,7 +250,7 @@ async function scanLiveFrame() {
     canvas.getContext('2d',{willReadFrequently:false}).drawImage(video,0,0,canvas.width,canvas.height);
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.84));
     if(!blob)throw new Error('Couldn’t capture a camera frame.');
-    const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:await blobDataUrl(blob)})});
+    const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:await blobDataUrl(blob)})},()=>{$('cameraStatus').textContent='The scanner is taking longer than usual. Retrying…';$('scanProgressText').textContent='The recipe server is waking up. Please keep this page open…';});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(data.detail||'Ingredient scanning failed. Check the camera and try again.');
     const names=strings(data.ingredients);
@@ -268,13 +268,47 @@ async function scanLiveFrame() {
     }
     cameraScanTimer=setTimeout(scanLiveFrame,1900);
   } catch(error) {
-    scanMode='';stopLiveCamera('Scan stopped');$('scanProgress').hidden=true;
-    $('requestStatus').textContent=error.name==='TimeoutError'?'Ingredient scanning took too long. Please try again.':error.message;
+    scanMode='';stopLiveCamera('Scanning failed. Try again or type your ingredients.');$('scanProgress').hidden=true;
+    $('requestStatus').textContent=error.name==='TimeoutError'?'Ingredient scanning took too long. Try again or type your ingredients.':error.message;
+  }
+}
+async function scanPhoto(file) {
+  if(!file)return;
+  if(!file.type.startsWith('image/')){$('requestStatus').textContent='Choose a photo of your ingredients.';return;}
+  stopLiveCamera();
+  scanMode='camera';
+  $('cameraStage').classList.add('has-notice');
+  $('cameraStatus').textContent='Scanning your photo…';
+  $('scanProgress').hidden=false;
+  $('scanProgressTitle').textContent='Looking for ingredients';
+  $('scanProgressText').textContent='Sending your photo to the ingredient scanner…';
+  $('requestStatus').textContent='Scanning your photo. Please keep this page open…';
+  $('scanPhotoButton').disabled=true;
+  try {
+    const image=await blobDataUrl(file);
+    const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image})},()=>{$('cameraStatus').textContent='The scanner is taking longer than usual. Retrying…';$('scanProgressText').textContent='The recipe server is waking up. Please keep this page open…';});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Ingredient scanning failed.');
+    const names=strings(data.ingredients);
+    if(!names.length){scanMode='';$('cameraStatus').textContent='No ingredients found. Try another photo or type them below.';$('requestStatus').textContent='No ingredients found. Try another photo or type your ingredients below.';return;}
+    setDetectedIngredients(names);
+    $('cameraStatus').textContent=`Found: ${names.join(', ')}`;
+    $('scanProgressTitle').textContent='Ingredients identified';
+    $('scanProgressText').textContent=`${names.join(' · ')} — finding recipes…`;
+    $('requestStatus').textContent=`Found ${names.join(', ')}. Finding recipes…`;
+    await requestRecipes(true);
+  } catch(error) {
+    scanMode='';$('cameraStatus').textContent='Scanning failed. Try another photo or type ingredients below.';
+    $('requestStatus').textContent=error.name==='TimeoutError'?'The scanner took too long. Try again or type your ingredients.':error.message;
+  } finally {
+    $('scanProgress').hidden=true;
+    $('scanPhotoButton').disabled=false;
+    $('scanPhotoInput').value='';
   }
 }
 async function startLiveCamera() {
   if(cameraScanning)return;
-  if(!navigator.mediaDevices?.getUserMedia){$('cameraStatus').textContent='Live camera scanning is unavailable in this browser. Open the app over HTTPS on a supported device.';return;}
+  if(!navigator.mediaDevices?.getUserMedia){stopLiveCamera('Camera unavailable. Scan a photo or type ingredients below.');$('requestStatus').textContent='Live camera scanning is unavailable in this browser. You can scan a photo or type ingredients.';return;}
   $('startCamera').disabled=true;$('cameraStatus').textContent='Waiting for camera permission…';
   $('requestStatus').textContent='';
   try {
@@ -310,6 +344,8 @@ async function loadGuide() {
 $('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(true);});
 $('searchButton').addEventListener('click',()=>requestRecipes(false));
 $('startCamera').addEventListener('click',startLiveCamera);
+$('scanPhotoButton').addEventListener('click',()=>$('scanPhotoInput').click());
+$('scanPhotoInput').addEventListener('change',event=>scanPhoto(event.target.files?.[0]));
 $('stopCamera').addEventListener('click',()=>{scanMode='';stopLiveCamera();$('scanProgress').hidden=true;});
 function scanAgain(){location.hash='#/';setDetectedIngredients([]);$('requestStatus').textContent='';$('scanProgress').hidden=true;startLiveCamera();}
 $('backToScanner').addEventListener('click',scanAgain);

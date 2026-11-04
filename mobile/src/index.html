@@ -43,7 +43,7 @@
               <span class="camera-scan-line" aria-hidden="true"></span><span class="camera-scan-corners" aria-hidden="true"></span>
               <p id="cameraStatus" class="camera-status" role="status" aria-live="polite">Camera is off</p>
             </div>
-            <div class="camera-actions"><button id="startCamera" type="button" class="primary-button">Start live scanner <span aria-hidden="true">⌗</span></button><button id="stopCamera" type="button" class="text-button" hidden>Stop camera</button></div>
+            <div class="camera-actions"><button id="startCamera" type="button" class="primary-button">Start live scanner <span aria-hidden="true">⌗</span></button><button id="scanPhotoButton" type="button" class="text-button">Scan a photo</button><input id="scanPhotoInput" type="file" accept="image/*" hidden aria-label="Choose a photo of ingredients"><button id="stopCamera" type="button" class="text-button" hidden>Stop camera</button></div>
           </div>
           <label for="query" class="manual-label">Or type ingredients</label>
           <textarea id="query" rows="1" maxlength="500" placeholder="e.g. paneer, spinach, tomato" enterkeyhint="go" autocapitalize="none" spellcheck="false"></textarea>
