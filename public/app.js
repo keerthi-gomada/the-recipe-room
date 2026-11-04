@@ -15,6 +15,11 @@ let results = readRecipes({getItem: key => sessionStorage.getItem(key)}, 'recipe
 let currentPage = '';
 let loading = false;
 let guideLoaded = false;
+let cameraStream = null;
+let cameraScanning = false;
+let cameraAttempts = 0;
+let scanMode = '';
+const MAX_CAMERA_SCANS = 4;
 const pantrySelections = new Map();
 const pantryKey = text => text.trim().toLowerCase().replace(/\s+/g,' ');
 function pantryChip(text) {
@@ -139,6 +144,8 @@ function route() {
   stepReader.stop();
   const hash = location.hash || '#/';
   const page = hash.startsWith('#/recipe/') ? 'recipe' : hash === '#/liked' ? 'liked' : hash === '#/results' ? 'results' : 'home';
+  if(page!=='home'&&cameraStream)stopLiveCamera();
+  if(page==='home'&&currentPage!=='home')scanMode='';
   if (page === 'recipe' && currentPage !== 'recipe') originPage = currentPage === 'liked' ? '#/liked' : currentPage==='results' ? '#/results' : '#/';
   for (const name of ['home','liked','recipe','results']) $(name+'Page').hidden = name !== page;
   $('scanResultsSummary').textContent=results.length?`${results.length} recipe${results.length===1?'':'s'} found from your pantry scan.`:'Your scan is ready.';
@@ -171,7 +178,7 @@ async function requestRecipes(generated) {
   $('recipeForm').setAttribute('aria-busy','true');
   $('requestStatus').textContent = generated ? 'Finding your next favourite…' : 'Searching the collection…';
   try {
-    const scanned=$('photoPreview').hidden===false;
+    const scanned=scanMode==='camera';
     const ingredientCount=query.split('+').map(item=>item.trim()).filter(Boolean).length;
     const postGenerate=()=>requestApi(`${API_BASE}/api/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})},()=>{$('scanProgressText').textContent='The recipe kitchen is waking up…';});
     let response,data;
@@ -212,29 +219,75 @@ function setDetectedIngredients(names) {
   box.hidden=!names.length;
   $('query').value=names.join(' + ');
 }
-async function scanPhoto(file) {
-  if(!file)return;
-  if(file.size>8*1024*1024){$('requestStatus').textContent='Choose an image smaller than 8 MB.';return;}
-  const reader=new FileReader();
-  reader.onload=async()=>{
-    currentPhotoData=String(reader.result||'');
-    $('photoImage').src=currentPhotoData;$('photoPreview').hidden=false;
-    $('photoPreview').classList.add('is-scanning');
-    $('scanProgress').hidden=false;$('scanProgressTitle').textContent='Scanning your ingredients';$('scanProgressText').textContent='Looking for vegetables and pantry items…';
-    $('requestStatus').textContent='';
-    $('generateButton').disabled=true;
-    try{
-      const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:currentPhotoData})});
-      const data=await response.json().catch(()=>({}));
-      if(!response.ok)throw new Error(data.detail||'Couldn’t identify ingredients in this photo.');
-      setDetectedIngredients(strings(data.ingredients));
-      $('photoPreview').classList.remove('is-scanning');
-      if(data.ingredients?.length){$('scanProgressTitle').textContent='Ingredients identified';$('scanProgressText').textContent=`${data.ingredients.join(' · ')} — finding recipes…`;await requestRecipes(true);}
-      else{$('scanProgress').hidden=true;$('requestStatus').textContent='No pantry ingredients were clear in this photo. Try another angle or type them below.';}
-    }catch(error){$('photoPreview').classList.remove('is-scanning');$('scanProgress').hidden=true;$('requestStatus').textContent=error.message;}
-    finally{$('generateButton').disabled=false;}
-  };
-  reader.readAsDataURL(file);
+function stopLiveCamera(message='Camera is off') {
+  cameraScanning=false;
+  clearTimeout(cameraScanTimer);
+  cameraStream?.getTracks().forEach(track=>track.stop());
+  cameraStream=null;
+  const video=$('cameraFeed');
+  if(video){video.pause();video.srcObject=null;video.hidden=true;}
+  $('cameraStage').classList.remove('is-live');
+  $('cameraPrompt').hidden=false;
+  $('cameraStatus').textContent=message;
+  $('startCamera').hidden=false;$('startCamera').disabled=false;
+  $('stopCamera').hidden=true;
+}
+let cameraScanTimer;
+function blobDataUrl(blob) {
+  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(new Error('Couldn’t read the camera frame.'));reader.readAsDataURL(blob);});
+}
+async function scanLiveFrame() {
+  if(!cameraScanning)return;
+  const video=$('cameraFeed');
+  if(video.readyState<2||!video.videoWidth){cameraScanTimer=setTimeout(scanLiveFrame,500);return;}
+  cameraAttempts++;
+  $('cameraStatus').textContent=`Scanning ingredients · ${cameraAttempts} of ${MAX_CAMERA_SCANS}`;
+  $('scanProgress').hidden=false;$('scanProgressTitle').textContent='Looking for ingredients';$('scanProgressText').textContent='Move the camera slowly across your vegetables and pantry items…';
+  try {
+    const scale=Math.min(1,1280/video.videoWidth);
+    const canvas=document.createElement('canvas');canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
+    canvas.getContext('2d',{willReadFrequently:false}).drawImage(video,0,0,canvas.width,canvas.height);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.84));
+    if(!blob)throw new Error('Couldn’t capture a camera frame.');
+    const response=await requestApi(`${API_BASE}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:await blobDataUrl(blob)})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.detail||'Ingredient scanning failed. Check the camera and try again.');
+    const names=strings(data.ingredients);
+    if(names.length){
+      setDetectedIngredients(names);
+      $('scanProgressTitle').textContent='Ingredients identified';$('scanProgressText').textContent=`${names.join(' · ')} — finding recipes…`;
+      stopLiveCamera('Ingredients found');
+      await requestRecipes(true);
+      return;
+    }
+    if(cameraAttempts>=MAX_CAMERA_SCANS){
+      scanMode='';stopLiveCamera('No clear ingredients found. Move closer and try again.');$('scanProgress').hidden=true;
+      $('requestStatus').textContent='I couldn’t identify ingredients yet. Move closer, improve the lighting, and start the scanner again.';
+      return;
+    }
+    cameraScanTimer=setTimeout(scanLiveFrame,1900);
+  } catch(error) {
+    scanMode='';stopLiveCamera('Scan stopped');$('scanProgress').hidden=true;
+    $('requestStatus').textContent=error.name==='TimeoutError'?'Ingredient scanning took too long. Please try again.':error.message;
+  }
+}
+async function startLiveCamera() {
+  if(cameraScanning)return;
+  if(!navigator.mediaDevices?.getUserMedia){$('cameraStatus').textContent='Live camera scanning is unavailable in this browser. Open the app over HTTPS on a supported device.';return;}
+  $('startCamera').disabled=true;$('cameraStatus').textContent='Waiting for camera permission…';
+  $('requestStatus').textContent='';
+  try {
+    cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    const video=$('cameraFeed');video.srcObject=cameraStream;video.hidden=false;
+    await video.play();
+    $('cameraPrompt').hidden=true;$('cameraStage').classList.add('is-live');
+    $('startCamera').hidden=true;$('stopCamera').hidden=false;
+    cameraAttempts=0;cameraScanning=true;scanMode='camera';
+    $('cameraStatus').textContent='Center the ingredients inside the frame';
+    cameraScanTimer=setTimeout(scanLiveFrame,1600);
+  } catch(error) {
+    stopLiveCamera(error.name==='NotAllowedError'?'Allow camera access in your browser settings, then try again.':'Couldn’t start the camera. Check camera access and try again.');
+  }
 }
 async function loadGuide() {
   if (guideLoaded) return;
@@ -254,10 +307,11 @@ async function loadGuide() {
 }
 $('recipeForm').addEventListener('submit',event=>{event.preventDefault();$('query').blur();requestRecipes(true);});
 $('searchButton').addEventListener('click',()=>requestRecipes(false));
-$('backToScanner').addEventListener('click',()=>{location.hash='#/';$('ingredientPhoto').focus();});
-$('scanAgainButton').addEventListener('click',()=>location.hash='#/');
-$('ingredientPhoto').addEventListener('change',event=>scanPhoto(event.target.files?.[0]));
-$('changePhoto').addEventListener('click',()=>$('ingredientPhoto').click());
+$('startCamera').addEventListener('click',startLiveCamera);
+$('stopCamera').addEventListener('click',()=>{scanMode='';stopLiveCamera();$('scanProgress').hidden=true;});
+function scanAgain(){location.hash='#/';setDetectedIngredients([]);$('requestStatus').textContent='';$('scanProgress').hidden=true;startLiveCamera();}
+$('backToScanner').addEventListener('click',scanAgain);
+$('scanAgainButton').addEventListener('click',scanAgain);
 $('detectedIngredients').addEventListener('click',event=>{const button=event.target.closest('[data-remove-ingredient]');if(!button)return;const names=strings($('query').value.split('+').map(item=>item.trim()).filter(Boolean));names.splice(Number(button.dataset.removeIngredient),1);setDetectedIngredients(names);});
 $('query').addEventListener('input',()=>{if($('detectedIngredients').hidden)return;setDetectedIngredients($('query').value.split(/[+,\n]/).map(item=>item.trim()).filter(Boolean));});
 $('query').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('recipeForm').requestSubmit();}});
@@ -304,8 +358,8 @@ $('retryGuide').addEventListener('click',loadGuide);
 $('guide').addEventListener('click',event=>{if(event.target===$('guide')){const r=$('guide').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)$('guide').close();}});
 document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();$('main').focus();});
 window.addEventListener('hashchange',route);
-window.addEventListener('pagehide',()=>stepReader.stop());
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stepReader.stop();});
+window.addEventListener('pagehide',()=>{stepReader.stop();stopLiveCamera();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stepReader.stop();if(cameraStream){scanMode='';stopLiveCamera('Camera paused. Start the scanner again when you return.');$('scanProgress').hidden=true;}}});
 window.addEventListener('storage',event=>{if(event.key===LIKED_KEY){likes=readRecipes(localStorage,LIKED_KEY);renderCollections();if(currentPage==='recipe'){let key=location.hash.slice(9);try{key=decodeURIComponent(key);}catch{}showRecipe(findRecipe(key));}}});
 window.recipeRoomBack = () => {if($('guide').open){$('guide').close();return true;}if(currentPage!=='home'){location.hash=originPage==='#/liked'&&currentPage==='recipe'?'#/liked':'#/';return true;}return false;};
 let installPrompt;
